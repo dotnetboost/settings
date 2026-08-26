@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "api",
+      "runtimeExecutable": "dotnet",
+      "runtimeArgs": ["run", "--project", "samples/SampleApp/SampleApp.csproj", "--urls", "http://localhost:5199"],
+      "port": 5199
+    },
+    {
+      "name": "dashboard",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "--prefix", "clients/dashboard"],
+      "port": 3000
+    }
+  ]
+}

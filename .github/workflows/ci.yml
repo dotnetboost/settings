@@ -1,0 +1,403 @@
+name: CI / CD
+
+on:
+  push:
+    branches: [ main, develop ]
+    tags:    [ 'v*.*.*' ]
+  pull_request:
+    branches: [ main, develop ]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  NUGET_FEED: https://api.nuget.org/v3/index.json
+  COVERAGE_THRESHOLD: 80
+
+jobs:
+  # ───────────────────────────────────────────────────────────────────────
+  build-and-unit-test:
+    name: Build & Unit Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+
+      - name: Setup .NET 10 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/Directory.Packages.props') }}
+          restore-keys: nuget-${{ runner.os }}-
+
+      - name: Restore
+        run: dotnet restore
+
+      - name: Build (Release)
+        run: dotnet build --configuration Release --no-restore -warnaserror
+
+      - name: Run unit tests
+        run: |
+          dotnet test tests/DotNetBoost.Settings.UnitTests \
+            --configuration Release --no-build \
+            --logger "trx;LogFileName=unit-tests.trx" \
+            --logger "console;verbosity=normal" \
+            --collect:"XPlat Code Coverage" \
+            --results-directory ./test-results/unit
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: unit-test-results
+          path: ./test-results/unit/
+
+  # ───────────────────────────────────────────────────────────────────────
+  coverage-gate:
+    name: Coverage Gate
+    runs-on: ubuntu-latest
+    needs: build-and-unit-test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: unit-test-results
+          path: ./test-results
+
+      - name: Coverage gate
+        uses: danielpalme/ReportGenerator-GitHub-Action@5
+        with:
+          reports: './test-results/**/coverage.cobertura.xml'
+          targetdir: './coverage-html'
+          reporttypes: 'HtmlInline;Badges;MarkdownSummaryGithub'
+          minimumCoverage: ${{ env.COVERAGE_THRESHOLD }}
+          tag: ${{ github.run_number }}
+
+      - name: Publish coverage summary
+        if: always()
+        run: |
+          [ -f "./coverage-html/SummaryGithub.md" ] && cat ./coverage-html/SummaryGithub.md >> $GITHUB_STEP_SUMMARY || true
+
+      - uses: actions/upload-artifact@v4
+        with: { name: coverage-html, path: ./coverage-html/ }
+
+  # ───────────────────────────────────────────────────────────────────────
+  provider-tests:
+    name: Provider Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: build-and-unit-test
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/Directory.Packages.props') }}
+          restore-keys: nuget-${{ runner.os }}-
+
+      - run: dotnet restore
+      - run: dotnet build --configuration Release --no-restore
+
+      - name: Run API endpoint tests
+        run: |
+          dotnet test tests/DotNetBoost.Settings.ApiTests \
+            --configuration Release --no-build \
+            --logger "trx;LogFileName=api-tests.trx" \
+            --logger "console;verbosity=normal" \
+            --results-directory ./test-results/provider
+
+      - name: Run provider (SQLite-backed) contract tests
+        run: |
+          dotnet test tests/DotNetBoost.Settings.ProviderTests \
+            --configuration Release --no-build \
+            --logger "trx;LogFileName=provider-tests.trx" \
+            --logger "console;verbosity=normal" \
+            --results-directory ./test-results/provider
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: provider-test-results, path: ./test-results/provider/ }
+
+  # ───────────────────────────────────────────────────────────────────────
+  integration-tests:
+    name: Integration Tests (Testcontainers)
+    runs-on: ubuntu-latest
+    # SQL Server's image is an order of magnitude larger than Postgres/Mongo and is slow to
+    # become healthy, so this job needs more headroom than the others.
+    timeout-minutes: 40
+    needs: build-and-unit-test
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/Directory.Packages.props') }}
+          restore-keys: nuget-${{ runner.os }}-
+
+      - run: dotnet restore
+      - run: dotnet build --configuration Release --no-restore
+
+      # ubuntu-latest ships with a running Docker daemon, which Testcontainers
+      # uses to start real SQL Server, PostgreSQL and MongoDB servers for these tests.
+      - name: Run integration tests against real databases
+        run: |
+          dotnet test tests/DotNetBoost.Settings.IntegrationTests \
+            --configuration Release --no-build \
+            --logger "trx;LogFileName=integration-tests.trx" \
+            --logger "console;verbosity=normal" \
+            --results-directory ./test-results/integration
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: integration-test-results, path: ./test-results/integration/ }
+
+  # ───────────────────────────────────────────────────────────────────────
+  code-quality:
+    name: Code Quality & Security
+    runs-on: ubuntu-latest
+    needs: build-and-unit-test
+    permissions:
+      security-events: write
+      actions: read
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+
+      - uses: github/codeql-action/init@v3
+        with: { languages: csharp, queries: security-and-quality }
+
+      - run: dotnet restore
+      - run: dotnet build --configuration Release --no-restore
+
+      - uses: github/codeql-action/analyze@v3
+        with: { category: /language:csharp }
+
+      - name: Audit NuGet packages for vulnerabilities
+        run: dotnet list package --vulnerable --include-transitive 2>&1 | tee vuln-report.txt
+        continue-on-error: true
+
+      - name: Fail on critical vulnerabilities
+        run: |
+          if grep -qi "critical" vuln-report.txt; then
+            echo "::error::Critical NuGet vulnerabilities detected"
+            exit 1
+          fi
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: vulnerability-report, path: vuln-report.txt }
+
+  # ───────────────────────────────────────────────────────────────────────
+  pack:
+    name: Pack NuGet packages
+    runs-on: ubuntu-latest
+    needs: [ build-and-unit-test, provider-tests, integration-tests ]
+    if: |
+      github.event_name != 'pull_request' &&
+      (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop' || startsWith(github.ref, 'refs/tags/v'))
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/Directory.Packages.props') }}
+          restore-keys: nuget-${{ runner.os }}-
+
+      - name: Determine version
+        id: version
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            VERSION="${GITHUB_REF#refs/tags/v}"
+          elif [[ "${GITHUB_REF}" == refs/heads/main ]]; then
+            BASE=$(git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//' || echo "1.0.0")
+            VERSION="${BASE}-preview.${{ github.run_number }}"
+          else
+            BASE=$(git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//' || echo "1.0.0")
+            VERSION="${BASE}-dev.${{ github.run_number }}"
+          fi
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "::notice::Package version -> ${VERSION}"
+
+      - run: dotnet restore
+      - run: dotnet build --configuration Release --no-restore
+
+      - name: Pack all library projects
+        run: |
+          for project in \
+            DotNetBoost.Settings.Core \
+            DotNetBoost.Settings.EntityFrameworkCore \
+            DotNetBoost.Settings.Dapper \
+            DotNetBoost.Settings.MongoDb \
+            DotNetBoost.Settings.FluentValidation \
+            DotNetBoost.Settings.API; do
+            dotnet pack "src/$project/$project.csproj" \
+              --configuration Release --no-build \
+              --output ./nupkgs \
+              -p:PackageVersion=${{ steps.version.outputs.version }} \
+              -p:RepositoryUrl=https://github.com/${{ github.repository }} \
+              -p:RepositoryBranch=${{ github.ref_name }} \
+              -p:RepositoryCommit=${{ github.sha }}
+          done
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nuget-packages
+          path: ./nupkgs/*.nupkg
+          retention-days: 30
+
+  # ───────────────────────────────────────────────────────────────────────
+  publish-nuget:
+    name: Publish to NuGet.org
+    runs-on: ubuntu-latest
+    needs: [ pack, code-quality ]
+    if: startsWith(github.ref, 'refs/tags/v')
+    environment: nuget-release
+    permissions: { contents: write }
+
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+
+      - uses: actions/download-artifact@v4
+        with: { name: nuget-packages, path: ./nupkgs }
+
+      - name: Verify packages exist
+        run: |
+          count=$(ls ./nupkgs/*.nupkg 2>/dev/null | wc -l)
+          echo "Found ${count} .nupkg file(s)"
+          [ "$count" -gt 0 ] || { echo "::error::No .nupkg files found"; exit 1; }
+
+      - name: Push to NuGet.org
+        env:
+          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+        run: |
+          for pkg in ./nupkgs/*.nupkg; do
+            dotnet nuget push "$pkg" --api-key "$NUGET_API_KEY" --source "${{ env.NUGET_FEED }}" --skip-duplicate
+          done
+
+      - name: Generate release notes
+        id: changelog
+        run: |
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          if [ -n "$PREV_TAG" ]; then
+            git log "${PREV_TAG}..HEAD" --pretty=format:"- %s (%h)" --no-merges > release-notes.md
+          else
+            echo "Initial release" > release-notes.md
+          fi
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: Release ${{ needs.pack.outputs.version }}
+          body_path: release-notes.md
+          prerelease: ${{ contains(needs.pack.outputs.version, '-') }}
+          files: ./nupkgs/*.nupkg
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ───────────────────────────────────────────────────────────────────────
+  publish-github-packages:
+    name: Publish to GitHub Packages
+    runs-on: ubuntu-latest
+    needs: [ pack, code-quality ]
+    if: |
+      github.event_name != 'pull_request' &&
+      (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
+    permissions: { packages: write }
+
+    steps:
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+
+      - uses: actions/download-artifact@v4
+        with: { name: nuget-packages, path: ./nupkgs }
+
+      - run: |
+          dotnet nuget add source \
+            "https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json" \
+            --name github --username ${{ github.actor }} \
+            --password ${{ secrets.GITHUB_TOKEN }} --store-password-in-clear-text
+
+      - run: |
+          for pkg in ./nupkgs/*.nupkg; do
+            dotnet nuget push "$pkg" --source github --api-key ${{ secrets.GITHUB_TOKEN }} --skip-duplicate
+          done
+
+  # ───────────────────────────────────────────────────────────────────────
+  notify-failure:
+    name: Notify on Failure
+    runs-on: ubuntu-latest
+    needs: [ build-and-unit-test, provider-tests, integration-tests, code-quality ]
+    if: failure() && github.ref == 'refs/heads/main'
+    steps:
+      - uses: slackapi/slack-github-action@v1
+        with:
+          payload: |
+            {
+              "text": "❌ *${{ github.repository }}* — CI failed on `main`",
+              "attachments": [{
+                "color": "danger",
+                "fields": [
+                  { "title": "Commit", "value": "${{ github.sha }}", "short": true },
+                  { "title": "Author", "value": "${{ github.actor }}", "short": true },
+                  { "title": "Run", "value": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}", "short": false }
+                ]
+              }]
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        continue-on-error: true

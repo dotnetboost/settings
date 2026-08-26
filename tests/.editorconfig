@@ -1,0 +1,16 @@
+# Analyzer rules relaxed for test projects only.
+
+[*.cs]
+
+# CA1707: xunit test methods use Method_Scenario_ExpectedResult naming,
+# where underscores are the convention rather than a defect.
+dotnet_diagnostic.CA1707.severity = none
+
+# CA2263: several tests deliberately exercise the non-generic, Type-based
+# overloads (e.g. Extensions.ConvertTo(typeof(bool), "true")); that overload
+# is the API under test, so the generic one is not a valid substitute.
+dotnet_diagnostic.CA2263.severity = none
+
+# CA1711: xunit collection-definition classes are named XxxCollection by convention;
+# the rule's "Collection means IEnumerable" heuristic does not apply to them.
+dotnet_diagnostic.CA1711.severity = none

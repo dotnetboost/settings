@@ -1,0 +1,12 @@
+<Project>
+
+  <!--
+    Directory.Build.props declares <PackageReadmeFile>README.md</PackageReadmeFile>, but a
+    readme is only embedded if the file is actually packed. This lives in .targets rather
+    than .props so that IsPackable (set inside each project) is already known here.
+  -->
+  <ItemGroup Condition="'$(IsPackable)' != 'false'">
+    <None Include="$(MSBuildThisFileDirectory)README.md" Pack="true" PackagePath="\" Visible="false" />
+  </ItemGroup>
+
+</Project>

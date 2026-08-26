@@ -1,0 +1,121 @@
+<Project>
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
+  </PropertyGroup>
+
+  <ItemGroup Label="Microsoft">
+    <PackageVersion Include="Microsoft.Extensions.Caching.Memory" Version="10.0.11" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.11" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.11" />
+    <PackageVersion Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.11" />
+    <PackageVersion Include="Microsoft.Extensions.Logging" Version="10.0.11" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.11" />
+    <PackageVersion Include="Microsoft.AspNetCore.Http.Abstractions" Version="2.3.12" />
+    <!-- 10.0.11 across the board: the first Microsoft.AspNetCore.OpenApi release that
+         requires the patched Microsoft.OpenApi [2.7.5, 3.0.0) (GHSA-v5pm-xwqc-g5wc), and
+         the floor that the Aspire 13.5 client integrations ask for. -->
+    <PackageVersion Include="Microsoft.AspNetCore.OpenApi" Version="10.0.11" />
+    <PackageVersion Include="Microsoft.SourceLink.GitHub" Version="10.0.400" />
+  </ItemGroup>
+
+  <ItemGroup Label="Aspire — AppHost (orchestration)">
+    <PackageVersion Include="Aspire.Hosting.AppHost" Version="13.5.2" />
+    <PackageVersion Include="Aspire.Hosting.PostgreSQL" Version="13.5.2" />
+    <PackageVersion Include="Aspire.Hosting.Redis" Version="13.5.2" />
+    <PackageVersion Include="Aspire.Hosting.JavaScript" Version="13.5.2" />
+    <!-- Referenced only when the matching provider block in AppHost.cs is uncommented. -->
+    <PackageVersion Include="Aspire.Hosting.MongoDB" Version="13.5.2" />
+    <PackageVersion Include="Aspire.Hosting.SqlServer" Version="13.5.2" />
+  </ItemGroup>
+
+  <ItemGroup Label="Aspire — client integrations (consumed by the API)">
+    <PackageVersion Include="Aspire.Npgsql.EntityFrameworkCore.PostgreSQL" Version="13.5.2" />
+    <PackageVersion Include="Aspire.StackExchange.Redis" Version="13.5.2" />
+    <!-- Referenced only when the matching provider block in Program.cs is uncommented. -->
+    <PackageVersion Include="Aspire.Npgsql" Version="13.5.2" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.SqlServer" Version="10.0.11" />
+  </ItemGroup>
+
+  <ItemGroup Label="Aspire — service defaults (telemetry, resilience, discovery)">
+    <PackageVersion Include="Microsoft.Extensions.Http.Resilience" Version="10.9.0" />
+    <PackageVersion Include="Microsoft.Extensions.ServiceDiscovery" Version="10.9.0" />
+    <PackageVersion Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.18.0" />
+    <PackageVersion Include="OpenTelemetry.Extensions.Hosting" Version="1.18.0" />
+    <PackageVersion Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.18.0" />
+    <PackageVersion Include="OpenTelemetry.Instrumentation.Http" Version="1.18.0" />
+    <PackageVersion Include="OpenTelemetry.Instrumentation.Runtime" Version="1.18.0" />
+  </ItemGroup>
+
+  <ItemGroup Label="API documentation">
+    <PackageVersion Include="Scalar.AspNetCore" Version="2.17.1" />
+  </ItemGroup>
+
+  <ItemGroup Label="Dapper">
+    <PackageVersion Include="Dapper" Version="2.1.79" />
+  </ItemGroup>
+
+  <ItemGroup Label="MongoDB">
+    <PackageVersion Include="MongoDB.Driver" Version="3.8.1" />
+  </ItemGroup>
+
+  <ItemGroup Label="FluentValidation">
+    <PackageVersion Include="FluentValidation" Version="12.1.1" />
+  </ItemGroup>
+
+  <!-- Transitive pins: patched versions for packages flagged by NuGet audit. -->
+  <ItemGroup Label="Transitive security pins">
+    <!-- MongoDB.Driver -> SharpCompress 0.30.1 (GHSA-6c8g-7p36-r338, patched in 0.48.0). -->
+    <PackageVersion Include="SharpCompress" Version="0.48.1" />
+    <!-- Microsoft.Data.Sqlite -> SQLitePCLRaw.* 2.1.11 (GHSA-2m69-gcr7-jv3q, fixed after 2.1.11). -->
+    <PackageVersion Include="SQLitePCLRaw.bundle_e_sqlite3" Version="2.1.13" />
+    <PackageVersion Include="SQLitePCLRaw.lib.e_sqlite3" Version="2.1.13" />
+    <PackageVersion Include="SQLitePCLRaw.provider.e_sqlite3" Version="2.1.13" />
+    <PackageVersion Include="SQLitePCLRaw.core" Version="2.1.13" />
+  </ItemGroup>
+
+  <ItemGroup Label="Integration testing">
+    <PackageVersion Include="Testcontainers.PostgreSql" Version="4.14.0" />
+    <PackageVersion Include="Testcontainers.MongoDb" Version="4.14.0" />
+    <PackageVersion Include="Testcontainers.MsSql" Version="4.14.0" />
+    <PackageVersion Include="Microsoft.Data.SqlClient" Version="6.1.4" />
+    <PackageVersion Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
+    <PackageVersion Include="Npgsql" Version="10.0.3" />
+  </ItemGroup>
+
+  <ItemGroup Label="Testing">
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.6.0" />
+    <PackageVersion Include="xunit" Version="2.9.3" />
+    <PackageVersion Include="xunit.runner.visualstudio" Version="3.1.5" />
+    <PackageVersion Include="Moq" Version="4.20.72" />
+    <PackageVersion Include="coverlet.collector" Version="10.0.1" />
+  </ItemGroup>
+
+  <!--
+    Per-TFM versions. The shipped packages multi-target net8.0 (LTS) and net10.0, and the
+    EF Core / ASP.NET Core families ship a separate major per runtime — EF Core 10 has no
+    net8.0 asset at all. $(TargetFramework) is set during NuGet's per-TFM evaluation, so
+    each inner build resolves the family matching its runtime.
+  -->
+  <PropertyGroup>
+    <_Net8 Condition="'$(TargetFramework)' == 'net8.0'">true</_Net8>
+  </PropertyGroup>
+
+  <ItemGroup Label="EF Core / ASP.NET Core — net8.0" Condition="'$(_Net8)' == 'true'">
+    <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="8.0.30" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Relational" Version="8.0.30" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Sqlite" Version="8.0.30" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.InMemory" Version="8.0.30" />
+    <PackageVersion Include="Microsoft.Data.Sqlite" Version="8.0.30" />
+    <PackageVersion Include="Microsoft.AspNetCore.TestHost" Version="8.0.30" />
+  </ItemGroup>
+
+  <ItemGroup Label="EF Core / ASP.NET Core — net10.0" Condition="'$(_Net8)' != 'true'">
+    <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="10.0.11" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.11" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.11" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.InMemory" Version="10.0.11" />
+    <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.11" />
+    <PackageVersion Include="Microsoft.AspNetCore.TestHost" Version="10.0.11" />
+  </ItemGroup>
+</Project>

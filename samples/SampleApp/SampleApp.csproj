@@ -1,0 +1,49 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <!-- Pure JSON API: no wwwroot, so skip the static web assets manifest. Without this the
+         app throws DirectoryNotFoundException for wwwroot/ on startup in Development. -->
+    <StaticWebAssetsEnabled>false</StaticWebAssetsEnabled>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/DotNetBoost.Settings.Core/DotNetBoost.Settings.Core.csproj" />
+    <ProjectReference Include="../../src/DotNetBoost.Settings.EntityFrameworkCore/DotNetBoost.Settings.EntityFrameworkCore.csproj" />
+    <ProjectReference Include="../../src/DotNetBoost.Settings.FluentValidation/DotNetBoost.Settings.FluentValidation.csproj" />
+    <ProjectReference Include="../../src/DotNetBoost.Settings.API/DotNetBoost.Settings.API.csproj" />
+    <!-- OpenTelemetry, health checks, service discovery and resilient HttpClients. -->
+    <ProjectReference Include="../../aspire/DotNetBoost.Settings.ServiceDefaults/DotNetBoost.Settings.ServiceDefaults.csproj" />
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
+    <PackageReference Include="Scalar.AspNetCore" />
+  </ItemGroup>
+
+  <!--
+    Storage provider. Exactly one group below is active; it must match the active block
+    in Program.cs and the container started by aspire/DotNetBoost.Settings.AppHost.
+  -->
+  <ItemGroup Label="Storage provider — ACTIVE: PostgreSQL (EF Core)">
+    <PackageReference Include="Aspire.Npgsql.EntityFrameworkCore.PostgreSQL" />
+  </ItemGroup>
+
+  <ItemGroup Label="Storage provider — ALTERNATIVE: MongoDB">
+    <!-- <ProjectReference Include="../../src/DotNetBoost.Settings.MongoDb/DotNetBoost.Settings.MongoDb.csproj" /> -->
+  </ItemGroup>
+
+  <ItemGroup Label="Storage provider — ALTERNATIVE: Dapper on PostgreSQL">
+    <!-- <ProjectReference Include="../../src/DotNetBoost.Settings.Dapper/DotNetBoost.Settings.Dapper.csproj" /> -->
+    <!-- <PackageReference Include="Aspire.Npgsql" /> -->
+  </ItemGroup>
+
+  <ItemGroup Label="Storage provider — ALTERNATIVE: SQL Server (EF Core)">
+    <!-- <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" /> -->
+  </ItemGroup>
+
+  <ItemGroup Label="Storage provider — ALTERNATIVE: SQLite (EF Core, no container)">
+    <!-- <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" /> -->
+  </ItemGroup>
+
+  <!-- Backs RedisSettingCache. Drop it to fall back to the built-in IMemoryCache. -->
+  <ItemGroup Label="Cache">
+    <PackageReference Include="Aspire.StackExchange.Redis" />
+  </ItemGroup>
+</Project>

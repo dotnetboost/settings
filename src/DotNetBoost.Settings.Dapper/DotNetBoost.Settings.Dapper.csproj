@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <PackageId>DotNetBoost.Settings.Dapper</PackageId>
+    <Description>Dapper provider for DotNetBoost.Settings. Supports SQL Server, PostgreSQL, and SQLite.</Description>
+    <Version>1.0.0</Version>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- The integration tests exercise the real shipped DDL in DapperSchemaInitializer. -->
+    <InternalsVisibleTo Include="DotNetBoost.Settings.IntegrationTests" />
+    <InternalsVisibleTo Include="DotNetBoost.Settings.ProviderTests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../DotNetBoost.Settings.Core/DotNetBoost.Settings.Core.csproj" />
+    <PackageReference Include="Dapper" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" />
+  </ItemGroup>
+</Project>

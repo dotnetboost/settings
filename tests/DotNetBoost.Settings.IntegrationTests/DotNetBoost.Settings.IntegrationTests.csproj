@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/DotNetBoost.Settings.Core/DotNetBoost.Settings.Core.csproj" />
+    <ProjectReference Include="../../src/DotNetBoost.Settings.EntityFrameworkCore/DotNetBoost.Settings.EntityFrameworkCore.csproj" />
+    <ProjectReference Include="../../src/DotNetBoost.Settings.Dapper/DotNetBoost.Settings.Dapper.csproj" />
+    <ProjectReference Include="../../src/DotNetBoost.Settings.MongoDb/DotNetBoost.Settings.MongoDb.csproj" />
+    <!-- Reuses SettingStoreContractTests so the same 17-test contract runs against real engines. -->
+    <ProjectReference Include="../DotNetBoost.Settings.ProviderTests/DotNetBoost.Settings.ProviderTests.csproj" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="coverlet.collector" />
+    <PackageReference Include="Testcontainers.PostgreSql" />
+    <PackageReference Include="Testcontainers.MongoDb" />
+    <PackageReference Include="Testcontainers.MsSql" />
+    <PackageReference Include="Microsoft.Data.SqlClient" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
+    <PackageReference Include="Npgsql" />
+  </ItemGroup>
+</Project>

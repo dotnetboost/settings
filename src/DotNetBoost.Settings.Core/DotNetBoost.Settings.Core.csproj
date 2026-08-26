@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <PackageId>DotNetBoost.Settings.Core</PackageId>
+    <Description>
+      Core abstractions and engine for DotNetBoost.Settings — a strongly-typed,
+      database-backed runtime settings manager for ASP.NET Core.
+      Includes ISettingManager, ISettingStore, ISettingCache, change notifications,
+      audit trail, and encryption support.
+    </Description>
+    <Version>1.0.0</Version>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Caching.Memory" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+  </ItemGroup>
+</Project>

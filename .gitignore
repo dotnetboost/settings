@@ -1,0 +1,32 @@
+## .NET
+bin/
+obj/
+*.user
+*.suo
+.vs/
+.vscode/
+
+## Test results
+test-results/
+coverage-html/
+*.trx
+*.coverage
+*.coveragexml
+
+## NuGet
+*.nupkg
+*.snupkg
+nupkgs/
+.nuget/
+
+## Rider / VS
+.idea/
+*.DotSettings.user
+
+## macOS
+.DS_Store
+
+## Sample app runtime data
+samples/**/*.db
+samples/**/*.db-shm
+samples/**/*.db-wal
