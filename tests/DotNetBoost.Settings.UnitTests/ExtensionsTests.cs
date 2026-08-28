@@ -121,20 +121,8 @@ public class ExtensionsTests
     public void NeedsSerialization_ReturnsExpected(Type type, bool expected)
         => Assert.Equal(expected, Extensions.NeedsSerialization(type));
 
-    [Fact]
-    public void GetTypeByName_ReturnsType_ForKnownName()
-        => Assert.Equal(typeof(int), Extensions.GetTypeByName("System.Int32"));
 
-    [Fact]
-    public void GetTypeByName_ReturnsNull_ForUnknownName()
-        => Assert.Null(Extensions.GetTypeByName("This.Does.Not.Exist"));
 
-    [Fact]
-    public void GetTypeByName_ReturnsNull_ForNullOrWhitespace()
-    {
-        Assert.Null(Extensions.GetTypeByName(null!));
-        Assert.Null(Extensions.GetTypeByName("   "));
-    }
 
     [Theory]
     [InlineData(typeof(int), 42)]

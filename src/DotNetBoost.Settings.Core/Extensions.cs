@@ -1,12 +1,13 @@
 using System.ComponentModel;
-using System.Reflection;
-using System.Text;
 using System.Text.Json;
 
 namespace DotNetBoost.Settings.Core;
 
-/// <summary>Internal helpers for type conversion and serialisation.</summary>
-public static class Extensions
+/// <summary>
+/// Helpers for turning property values into their stored form and back. Internal: this is the
+/// engine's own serialisation detail, not something a consumer should bind to.
+/// </summary>
+internal static class Extensions
 {
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
 
@@ -88,24 +89,6 @@ public static class Extensions
         return true;
     }
 
-    /// <summary><see cref="NeedsSerialization(Type)"/> for a property's type.</summary>
-    public static bool PropertyNeedsSerialization(this PropertyInfo property)
-        => NeedsSerialization(property.PropertyType);
 
-    /// <summary>
-    /// Resolves a type by name, searching the loaded assemblies when it is not found in the
-    /// calling context. Returns <c>null</c> when no match exists.
-    /// </summary>
-    public static Type? GetTypeByName(string typeName)
-    {
-        if (string.IsNullOrWhiteSpace(typeName)) return null;
-        return Type.GetType(typeName)
-               ?? AppDomain.CurrentDomain.GetAssemblies()
-                   .Select(a => a.GetType(typeName))
-                   .FirstOrDefault(t => t is not null);
-    }
 
-    /// <summary>Wraps a string as a readable UTF-8 stream.</summary>
-    public static Stream ToStream(this string text)
-        => new MemoryStream(Encoding.UTF8.GetBytes(text));
 }
