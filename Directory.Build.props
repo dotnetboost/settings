@@ -8,6 +8,13 @@
     <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
     <AnalysisLevel>latest-recommended</AnalysisLevel>
 
+    <!--
+      Single source of truth for the version every package ships under. CI overrides it with
+      -p:PackageVersion=… derived from the git tag, so this is what a local build produces and
+      the floor a release is cut from. Bump it here, not in the individual projects.
+    -->
+    <Version>1.0.0</Version>
+
     <Authors>DotNetBoost Contributors</Authors>
     <Company>DotNetBoost</Company>
     <Copyright>© 2025 DotNetBoost Contributors</Copyright>

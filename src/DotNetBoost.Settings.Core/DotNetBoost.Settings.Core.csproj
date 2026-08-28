@@ -7,7 +7,6 @@
       Includes ISettingManager, ISettingStore, ISettingCache, change notifications,
       audit trail, and encryption support.
     </Description>
-    <Version>1.0.0</Version>
   </PropertyGroup>
 
   <ItemGroup>

@@ -64,6 +64,7 @@ dotnet test --filter "Category!=Integration"
 - Prefer `ConfigureAwait(false)` in library code (not required in the sample app).
 - New store providers must inherit `SettingStoreContractTests` in `DotNetBoost.Settings.ProviderTests` — this guarantees behavioural parity across backends.
 - Don't introduce breaking changes to `ISettingStore`, `ISettingAccessor<T>`, or `ISettingManager` without discussing in an issue first — these are implemented by external provider authors.
+- Every package ships under one version, set once as `<Version>` in the root `Directory.Build.props`. Bump it there — never in an individual `.csproj`. The packages depend on each other, so versions drifting apart would produce a release whose provider package asks for a `Core` that was never published. Releases override it anyway: CI derives the published version from the git tag and passes `-p:PackageVersion=…`.
 
 ## Adding a new provider
 

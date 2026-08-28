@@ -2,7 +2,6 @@
   <PropertyGroup>
     <PackageId>DotNetBoost.Settings.Dapper</PackageId>
     <Description>Dapper provider for DotNetBoost.Settings. Supports SQL Server, PostgreSQL, and SQLite.</Description>
-    <Version>1.0.0</Version>
   </PropertyGroup>
   <ItemGroup>
     <!-- The integration tests exercise the real shipped DDL in DapperSchemaInitializer. -->
