@@ -276,7 +276,43 @@ builder.Services.AddSettings()
     .Build();
 ```
 
-Supports `SqlConnection`, `NpgsqlConnection`, and `SqliteConnection`. `migrateSchema: true` auto-creates `Settings` and `SettingAudits` tables on startup.
+Supports `SqlConnection`, `NpgsqlConnection`, and `SqliteConnection`. `migrateSchema: true` auto-creates the settings and audit tables on startup.
+
+### Table and collection names
+
+The defaults are `Settings` and `SettingAudits` in the connection's default schema, and a
+`settings` collection on MongoDB. Override them when the database is shared, already has those
+names taken, or keeps configuration in its own schema:
+
+```csharp
+// Dapper
+.UseDapper(sp => new NpgsqlConnection(cs), migrateSchema: true, tables =>
+{
+    tables.Schema        = "config";
+    tables.SettingsTable = "AppSettings";
+    tables.AuditTable    = "AppSettingAudits";
+})
+
+// EF Core — set on the model, since that is where the mapping lives
+protected override void OnModelCreating(ModelBuilder modelBuilder)
+    => modelBuilder.ApplySettingsConfiguration(DatabaseProvider.PostgreSql, tables =>
+    {
+        tables.Schema        = "config";
+        tables.SettingsTable = "AppSettings";
+    });
+
+// MongoDB
+.UseMongoDb(connectionString, "my_app_db", collectionName: "app_settings")
+```
+
+Index names follow the table name — `UX_AppSettings_Group_Key` — so two settings tables can
+live in one schema without colliding. On SQL Server and PostgreSQL, `migrateSchema: true`
+creates the schema if it does not exist. SQLite has no schemas, so setting `Schema` there
+throws rather than producing puzzling SQL.
+
+> Table and schema names cannot be SQL parameters — they are composed into the statement text —
+> so they are validated as plain identifiers (letters, digits, underscores) and anything else is
+> rejected outright rather than escaped. Validation runs at startup, not on the first query.
 
 ### MongoDB
 

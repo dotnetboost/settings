@@ -44,7 +44,8 @@ public sealed class MongoSettingDocument
 /// <summary>MongoDB-backed <see cref="ISettingStore"/>.</summary>
 public sealed class MongoSettingStore : ISettingStore
 {
-    internal const string CollectionName = "settings";
+    /// <summary>Collection used when none is configured.</summary>
+    public const string DefaultCollectionName = "settings";
 
     private readonly IMongoCollection<MongoSettingDocument> _col;
 
@@ -54,10 +55,32 @@ public sealed class MongoSettingStore : ISettingStore
     /// registered scoped, so it would issue a blocking createIndex on every request. See
     /// <see cref="EnsureIndexesAsync"/>, which <c>UseMongoDb()</c> runs once at startup.
     /// </summary>
-    public MongoSettingStore(IMongoDatabase db)
+    /// <param name="db">The database holding the settings collection.</param>
+    /// <param name="collectionName">Collection name. Defaults to <c>settings</c>.</param>
+    public MongoSettingStore(IMongoDatabase db, string collectionName = DefaultCollectionName)
     {
         ArgumentNullException.ThrowIfNull(db);
-        _col = db.GetCollection<MongoSettingDocument>(CollectionName);
+        _col = db.GetCollection<MongoSettingDocument>(ValidCollection(collectionName));
+    }
+
+    /// <summary>
+    /// MongoDB collection names are permissive, but a few forms are reserved or illegal and
+    /// fail late with an obscure server error; reject those up front instead.
+    /// </summary>
+    private static string ValidCollection(string name)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+
+        if (name.Contains('$', StringComparison.Ordinal) ||
+            name.Contains('\0', StringComparison.Ordinal) ||
+            name.StartsWith("system.", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new ArgumentException(
+                $"'{name}' is not a usable MongoDB collection name: it must not contain '$' or a " +
+                "null character, nor start with 'system.'.", nameof(name));
+        }
+
+        return name;
     }
 
     /// <summary>
@@ -65,7 +88,8 @@ public sealed class MongoSettingStore : ISettingStore
     /// Idempotent: MongoDB treats a createIndex for an identical existing index as a no-op,
     /// so this is safe to run on every application start.
     /// </summary>
-    public static Task EnsureIndexesAsync(IMongoDatabase db, CancellationToken ct = default)
+    public static Task EnsureIndexesAsync(
+        IMongoDatabase db, string collectionName = DefaultCollectionName, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(db);
 
@@ -73,7 +97,8 @@ public sealed class MongoSettingStore : ISettingStore
         var model = new CreateIndexModel<MongoSettingDocument>(
             keys, new CreateIndexOptions { Unique = true, Name = "ux_group_key" });
 
-        return db.GetCollection<MongoSettingDocument>(CollectionName).Indexes.CreateOneAsync(model, cancellationToken: ct);
+        return db.GetCollection<MongoSettingDocument>(ValidCollection(collectionName))
+            .Indexes.CreateOneAsync(model, cancellationToken: ct);
     }
 
     /// <inheritdoc/>
@@ -203,9 +228,11 @@ public sealed class MongoSettingStore : ISettingStore
 /// application silently overriding one another's Mongo client.
 /// </para>
 /// </summary>
-internal sealed class SettingsMongoContext(IMongoDatabase database)
+internal sealed class SettingsMongoContext(IMongoDatabase database, string collectionName)
 {
     public IMongoDatabase Database { get; } = database;
+
+    public string CollectionName { get; } = collectionName;
 }
 
 /// <summary>
@@ -215,7 +242,7 @@ internal sealed class SettingsMongoContext(IMongoDatabase database)
 internal sealed class MongoIndexInitializer(SettingsMongoContext context) : IHostedService
 {
     public Task StartAsync(CancellationToken ct)
-        => MongoSettingStore.EnsureIndexesAsync(context.Database, ct);
+        => MongoSettingStore.EnsureIndexesAsync(context.Database, context.CollectionName, ct);
 
     public Task StopAsync(CancellationToken ct) => Task.CompletedTask;
 }
