@@ -208,8 +208,6 @@ public class AuditTrailTests
             return Task.CompletedTask;
         }
 
-        public Task<bool> GroupExistsAsync(string group, CancellationToken ct = default)
-            => Task.FromResult(_data.Values.Any(x => x.Group == group));
 
         public Task<int> CountAsync(string group, CancellationToken ct = default)
             => Task.FromResult(_data.Values.Count(x => x.Group == group));

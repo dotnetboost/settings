@@ -201,12 +201,6 @@ public sealed class EfCoreSettingStore(ISettingDbContext db) : ISettingStore
         return db.Settings.Where(x => x.Group == group).ExecuteDeleteAsync(ct);
     }
 
-    /// <inheritdoc/>
-    public Task<bool> GroupExistsAsync(string group, CancellationToken ct = default)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(group);
-        return db.Settings.AnyAsync(x => x.Group == group, ct);
-    }
 
     /// <inheritdoc/>
     public Task<int> CountAsync(string group, CancellationToken ct = default)

@@ -45,8 +45,6 @@ public interface ISettingStore
     /// <summary>Removes every row belonging to <paramref name="group"/>.</summary>
     Task DeleteGroupAsync(string group, CancellationToken ct = default);
 
-    /// <summary>Whether <paramref name="group"/> has at least one stored row.</summary>
-    Task<bool> GroupExistsAsync(string group, CancellationToken ct = default);
 
     /// <summary>Number of stored rows belonging to <paramref name="group"/>.</summary>
     Task<int> CountAsync(string group, CancellationToken ct = default);

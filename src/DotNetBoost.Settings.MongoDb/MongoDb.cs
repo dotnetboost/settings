@@ -157,12 +157,6 @@ public sealed class MongoSettingStore : ISettingStore
         return _col.DeleteManyAsync(GroupFilter(group), ct);
     }
 
-    /// <inheritdoc/>
-    public async Task<bool> GroupExistsAsync(string group, CancellationToken ct = default)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(group);
-        return await _col.CountDocumentsAsync(GroupFilter(group), cancellationToken: ct).ConfigureAwait(false) > 0;
-    }
 
     /// <inheritdoc/>
     public async Task<int> CountAsync(string group, CancellationToken ct = default)

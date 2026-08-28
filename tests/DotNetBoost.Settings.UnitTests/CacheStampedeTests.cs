@@ -89,7 +89,6 @@ public class CacheStampedeTests
         public Task UpsertManyAsync(IEnumerable<Setting> settings, CancellationToken ct = default) => Task.CompletedTask;
         public Task DeleteAsync(string group, string key, CancellationToken ct = default) => Task.CompletedTask;
         public Task DeleteGroupAsync(string group, CancellationToken ct = default) => Task.CompletedTask;
-        public Task<bool> GroupExistsAsync(string group, CancellationToken ct = default) => Task.FromResult(false);
         public Task<int> CountAsync(string group, CancellationToken ct = default) => Task.FromResult(0);
     }
 }

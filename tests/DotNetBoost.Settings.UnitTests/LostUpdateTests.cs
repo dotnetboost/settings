@@ -100,7 +100,6 @@ public class LostUpdateTests
 
         public Task DeleteAsync(string g, string k, CancellationToken ct = default) => Task.CompletedTask;
         public Task DeleteGroupAsync(string g, CancellationToken ct = default) => Task.CompletedTask;
-        public Task<bool> GroupExistsAsync(string g, CancellationToken ct = default) => Task.FromResult(_data.Count > 0);
         public Task<int> CountAsync(string g, CancellationToken ct = default)
             => Task.FromResult(_data.Values.Count(x => x.Group == g));
 

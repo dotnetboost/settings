@@ -150,20 +150,7 @@ public abstract class SettingStoreContractTests
         Assert.Equal(0, await store.CountAsync("Empty"));
     }
 
-    [Fact]
-    public async Task GroupExists_ReturnsTrue_WhenRowsExist()
-    {
-        var store = await CreateStoreAsync();
-        await store.UpsertAsync(Setting("Mail", "Port", "587"));
-        Assert.True(await store.GroupExistsAsync("Mail"));
-    }
 
-    [Fact]
-    public async Task GroupExists_ReturnsFalse_WhenNoRows()
-    {
-        var store = await CreateStoreAsync();
-        Assert.False(await store.GroupExistsAsync("Ghost"));
-    }
 
     // ---- optimistic concurrency ----------------------------------------------------------
     // Every store must honour Setting.RowVersion identically, so these live in the shared

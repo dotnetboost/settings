@@ -257,13 +257,6 @@ public sealed class DapperSettingStore(IDbConnection connection) : ISettingStore
         await connection.ExecuteAsync(new CommandDefinition(sql, new { Group = group }, cancellationToken: ct)).ConfigureAwait(false);
     }
 
-    /// <inheritdoc/>
-    public Task<bool> GroupExistsAsync(string group, CancellationToken ct = default)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(group);
-        const string sql = "SELECT COUNT(1) FROM Settings WHERE SettingGroup = @Group";
-        return connection.ExecuteScalarAsync<bool>(new CommandDefinition(sql, new { Group = group }, cancellationToken: ct));
-    }
 
     /// <inheritdoc/>
     public Task<int> CountAsync(string group, CancellationToken ct = default)
