@@ -8,7 +8,7 @@
     <ProjectReference Include="../../src/DotNetBoost.Settings.EntityFrameworkCore/DotNetBoost.Settings.EntityFrameworkCore.csproj" />
     <ProjectReference Include="../../src/DotNetBoost.Settings.Dapper/DotNetBoost.Settings.Dapper.csproj" />
     <ProjectReference Include="../../src/DotNetBoost.Settings.MongoDb/DotNetBoost.Settings.MongoDb.csproj" />
-    <!-- Reuses SettingStoreContractTests so the same 17-test contract runs against real engines. -->
+    <!-- Reuses SettingStoreContractTests so the same 24-test contract runs against real engines. -->
     <ProjectReference Include="../DotNetBoost.Settings.ProviderTests/DotNetBoost.Settings.ProviderTests.csproj" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="xunit" />

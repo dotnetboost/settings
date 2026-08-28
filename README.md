@@ -776,8 +776,10 @@ dotnetboost/
 │   ├── DotNetBoost.Settings.FluentValidation/
 │   └── DotNetBoost.Settings.API/
 ├── tests/
-│   ├── DotNetBoost.Settings.UnitTests/
-│   └── DotNetBoost.Settings.ProviderTests/     # Contract tests, run against SQLite
+│   ├── DotNetBoost.Settings.UnitTests/         # Core logic, mocked stores
+│   ├── DotNetBoost.Settings.ProviderTests/     # Store contract, in-process SQLite
+│   ├── DotNetBoost.Settings.IntegrationTests/  # Same contract, real engines (needs Docker)
+│   └── DotNetBoost.Settings.ApiTests/          # Minimal-API endpoints via TestHost
 ├── samples/
 │   └── SampleApp/                              # Runnable end-to-end demo
 ├── clients/
@@ -825,12 +827,13 @@ dotnetboost/
 ## Testing
 
 ```bash
-dotnet test                                          # all projects, all target frameworks
-dotnet test --collect:"XPlat Code Coverage"           # with coverage
-dotnet test tests/DotNetBoost.Settings.ProviderTests  # provider contract tests only
+dotnet test                                             # everything (integration tests need Docker)
+dotnet test --filter "Category!=Integration"            # skip the container-backed suites
+dotnet test --collect:"XPlat Code Coverage"             # with coverage
+dotnet test tests/DotNetBoost.Settings.ProviderTests    # store contract on SQLite only
 ```
 
-Adding a new store provider? Inherit `SettingStoreContractTests` and implement `CreateStoreAsync()` — you get 17 behavioural tests (upsert, delete, count, exists, etc.) for free, guaranteeing your provider behaves identically to the built-in ones.
+Adding a new store provider? Inherit `SettingStoreContractTests` and implement `CreateStoreAsync()` — you get 24 behavioural tests (upsert, delete, count, exists, etc.) for free, guaranteeing your provider behaves identically to the built-in ones.
 
 ---
 
