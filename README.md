@@ -382,6 +382,8 @@ public class RedisSettingCache(IConnectionMultiplexer redis) : ISettingCache
 
 Mark any property `[Sensitive]` and it is transparently encrypted before storage and decrypted on read — API keys, passwords, connection strings never touch the database as plaintext.
 
+This is encryption **at rest**. It protects a database dump, a backup, or anyone with table access. It is not an access control: your application reads these values decrypted, and so does the REST API if you expose it — see [Securing the endpoints](#securing-the-endpoints).
+
 ```csharp
 [SettingGroup("mail-server")]
 public class MailSettings
@@ -559,13 +561,44 @@ Registers, per `[SettingGroup]` class:
 | `POST` | `/api/settings/{route}` | Validate + persist; honours `If-Match`, `412` on a lost race |
 | `GET`  | `/api/settings/{route}/audit` | Change history (`404` if no audit store configured) |
 
-Secure a group with `[Authorize]` directly on the settings class:
+### Securing the endpoints
+
+**The generated endpoints are anonymous by default.** The library deliberately does not impose an
+authorization policy — who may read and write your settings is your application's decision, not
+this package's. It gives you the mechanism; you choose the policy.
+
+Apply `[Authorize]` to the settings class and it covers all three endpoints for that group:
 
 ```csharp
-[SettingGroup("payment")]
-[Authorize(Roles = "Admin")]
-public class PaymentSettings { /* ... */ }
+[SettingGroup("payment", Name = "PaymentSettings")]
+[Authorize(Roles = "Admin")]                    // or [Authorize(Policy = "SettingsAdmin")]
+public class PaymentSettings
+{
+    [Sensitive]
+    public string ApiKey { get; set; } = string.Empty;
+}
 ```
+
+> **Do this before exposing a group that holds `[Sensitive]` properties.**
+> `GET` returns the settings object as your application sees it, which means secrets come back
+> **decrypted** — that is what makes an editable admin UI possible. `[Sensitive]` encrypts values
+> *at rest*: it protects a database dump, a backup, or a DBA with table access. It does not
+> protect the API, which holds the key and decrypts on read. Without `[Authorize]`, a single
+> unauthenticated `GET` returns every secret in the group in plaintext.
+
+Standard ASP.NET Core authorization applies, so anything that works elsewhere works here —
+roles, policies, schemes:
+
+```csharp
+[Authorize(AuthenticationSchemes = "Bearer", Policy = "SettingsAdmin")]
+```
+
+Remember that authorization is per class. Adding a new `[SettingGroup]` starts it anonymous, so
+the attribute is worth adding at the same time as the class rather than afterwards.
+
+> The [`samples/SampleApp`](samples/SampleApp) settings classes carry no `[Authorize]` on
+> purpose — the sample is a showcase of the library's features and runs without an identity
+> provider. Do not copy that part into a real application.
 
 ---
 

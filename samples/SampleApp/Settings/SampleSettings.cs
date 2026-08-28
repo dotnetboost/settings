@@ -2,6 +2,11 @@ using DotNetBoost.Settings.Core.Attributes;
 
 namespace SampleApp.Settings;
 
+// NOTE: no [Authorize] anywhere in this sample. It is a feature showcase and runs without an
+// identity provider, so the generated endpoints are deliberately anonymous — which means the
+// [Sensitive] properties below are served decrypted to any caller. In a real application put
+// [Authorize] on each settings class; see "Securing the endpoints" in the README.
+
 // Name pins the persistence key so this class can be renamed or moved later without
 // orphaning its rows. It matches the class name here, so nothing moves today.
 [SettingGroup("mail-server", Name = "MailSettings")]
