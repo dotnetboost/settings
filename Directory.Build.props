@@ -17,10 +17,10 @@
 
     <Authors>DotNetBoost Contributors</Authors>
     <Company>DotNetBoost</Company>
-    <!-- A range, not just the current year: 2025 is when the work was first published and that
-         claim stands. Deliberately a literal — deriving it from the build date would make the
-         package contents vary by build day and defeat <Deterministic>. -->
-    <Copyright>© 2025-2026 DotNetBoost Contributors</Copyright>
+    <!-- 2026 is the year of first publication. Deliberately a literal rather than derived from
+         the build date: that would make the package contents vary by build day and defeat
+         <Deterministic>. Extend to a range (2026-2027) rather than replacing the year. -->
+    <Copyright>© 2026 DotNetBoost Contributors</Copyright>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageProjectUrl>https://github.com/dotnetboost/settings</PackageProjectUrl>
     <RepositoryUrl>https://github.com/dotnetboost/settings</RepositoryUrl>
