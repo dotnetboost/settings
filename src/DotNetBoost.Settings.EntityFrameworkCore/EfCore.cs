@@ -44,16 +44,13 @@ public interface ISettingDbContext
 
 /// <summary>Entity mapping for <see cref="Setting"/>, tuned per engine.</summary>
 /// <param name="provider">Selects the value column type and concurrency-token style.</param>
-/// <param name="tables">Schema and table names. Defaults to <c>Settings</c> with no schema.</param>
-public sealed class SettingConfiguration(DatabaseProvider provider, SettingTableOptions? tables = null)
+public sealed class SettingConfiguration(DatabaseProvider provider)
     : IEntityTypeConfiguration<Setting>
 {
-    private readonly SettingTableOptions _tables = Validated(tables);
-
     /// <inheritdoc/>
     public void Configure(EntityTypeBuilder<Setting> builder)
     {
-        builder.ToTable(_tables.SettingsTable, _tables.Schema);
+        builder.ToTable("Settings");
         builder.HasKey(x => x.Id);
         builder.Property(x => x.Id).ValueGeneratedNever();
         builder.Property(x => x.Group).HasColumnName("SettingGroup").HasMaxLength(191).IsRequired();
@@ -70,47 +67,29 @@ public sealed class SettingConfiguration(DatabaseProvider provider, SettingTable
             _                           => "TEXT"
         });
 
-        builder.HasIndex(x => new { x.Group, x.Key }).IsUnique().HasDatabaseName(_tables.SettingsIndexName);
+        builder.HasIndex(x => new { x.Group, x.Key }).IsUnique().HasDatabaseName("UX_Settings_Group_Key");
 
         // A store-generated token rather than SQL Server's native rowversion, so that
         // optimistic concurrency behaves identically across every provider — including the
         // Dapper and MongoDB stores, which have no server-side equivalent.
         builder.Property(x => x.RowVersion).IsConcurrencyToken().HasMaxLength(16);
     }
-
-    private static SettingTableOptions Validated(SettingTableOptions? tables)
-    {
-        var t = tables ?? new SettingTableOptions();
-        t.Validate();
-        return t;
-    }
 }
 
 /// <summary>Entity mapping for <see cref="SettingAuditEntry"/>.</summary>
-/// <param name="tables">Schema and table names. Defaults to <c>SettingAudits</c> with no schema.</param>
-public sealed class SettingAuditConfiguration(SettingTableOptions? tables = null)
-    : IEntityTypeConfiguration<SettingAuditEntry>
+public sealed class SettingAuditConfiguration : IEntityTypeConfiguration<SettingAuditEntry>
 {
-    private readonly SettingTableOptions _tables = Validated(tables);
-
     /// <inheritdoc/>
     public void Configure(EntityTypeBuilder<SettingAuditEntry> builder)
     {
-        builder.ToTable(_tables.AuditTable, _tables.Schema);
+        builder.ToTable("SettingAudits");
         builder.HasKey(x => x.Id);
         builder.Property(x => x.Id).ValueGeneratedNever();
         builder.Property(x => x.Group).HasColumnName("SettingGroup").HasMaxLength(191).IsRequired();
         builder.Property(x => x.Key).HasColumnName("SettingKey").HasMaxLength(191).IsRequired();
         builder.Property(x => x.ChangedBy).HasMaxLength(256).IsRequired();
         builder.Property(x => x.ChangedAt).IsRequired();
-        builder.HasIndex(x => new { x.Group, x.Key }).HasDatabaseName(_tables.AuditIndexName);
-    }
-
-    private static SettingTableOptions Validated(SettingTableOptions? tables)
-    {
-        var t = tables ?? new SettingTableOptions();
-        t.Validate();
-        return t;
+        builder.HasIndex(x => new { x.Group, x.Key });
     }
 }
 
@@ -122,20 +101,11 @@ public static class ModelBuilderExtensions
     /// </summary>
     /// <param name="mb">The model builder.</param>
     /// <param name="provider">The engine being targeted.</param>
-    /// <param name="configureTables">
-    /// Overrides the schema and table names. Must match whatever is passed to
-    /// <c>UseEntityFrameworkCore</c>-adjacent tooling such as migrations.
-    /// </param>
-    public static ModelBuilder ApplySettingsConfiguration(
-        this ModelBuilder mb, DatabaseProvider provider, Action<SettingTableOptions>? configureTables = null)
+    public static ModelBuilder ApplySettingsConfiguration(this ModelBuilder mb, DatabaseProvider provider)
     {
         ArgumentNullException.ThrowIfNull(mb);
-
-        var tables = new SettingTableOptions();
-        configureTables?.Invoke(tables);
-
-        mb.ApplyConfiguration(new SettingConfiguration(provider, tables));
-        mb.ApplyConfiguration(new SettingAuditConfiguration(tables));
+        mb.ApplyConfiguration(new SettingConfiguration(provider));
+        mb.ApplyConfiguration(new SettingAuditConfiguration());
         return mb;
     }
 }
