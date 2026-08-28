@@ -17,7 +17,10 @@
 
     <Authors>DotNetBoost Contributors</Authors>
     <Company>DotNetBoost</Company>
-    <Copyright>© 2025 DotNetBoost Contributors</Copyright>
+    <!-- A range, not just the current year: 2025 is when the work was first published and that
+         claim stands. Deliberately a literal — deriving it from the build date would make the
+         package contents vary by build day and defeat <Deterministic>. -->
+    <Copyright>© 2025-2026 DotNetBoost Contributors</Copyright>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageProjectUrl>https://github.com/dotnetboost/settings</PackageProjectUrl>
     <RepositoryUrl>https://github.com/dotnetboost/settings</RepositoryUrl>
