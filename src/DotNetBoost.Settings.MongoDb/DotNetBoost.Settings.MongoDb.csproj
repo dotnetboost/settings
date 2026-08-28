@@ -5,6 +5,10 @@
     <Version>1.0.0</Version>
   </PropertyGroup>
   <ItemGroup>
+    <InternalsVisibleTo Include="DotNetBoost.Settings.IntegrationTests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="../DotNetBoost.Settings.Core/DotNetBoost.Settings.Core.csproj" />
     <PackageReference Include="MongoDB.Driver" />
     <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" />

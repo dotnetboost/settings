@@ -288,6 +288,18 @@ builder.Services.AddSettings()
 
 The unique `(Group, Key)` index the store relies on is created once at startup by a hosted service. Pass `createIndexes: false` if the application's MongoDB user has no index-creation rights or you manage the index out of band — the store still assumes it exists.
 
+**If your application already has a MongoDB client** — through .NET Aspire, or its own registration — pass a factory instead, so the settings store shares it rather than opening a second one:
+
+```csharp
+builder.AddMongoDBClient("settingsdb");          // Aspire, or your own AddSingleton<IMongoClient>
+
+builder.Services.AddSettings()
+    .UseMongoDb(sp => sp.GetRequiredService<IMongoClient>().GetDatabase("my_app_db"))
+    .Build();
+```
+
+Either overload keeps `IMongoClient` and `IMongoDatabase` out of the container: the provider holds its database privately, so it can neither override nor be overridden by your application's own Mongo registration — whichever order they happen in.
+
 ---
 
 ## Reading & Writing Settings
@@ -757,7 +769,8 @@ dotnetboost/
 |---|---|---|
 | `.UseEntityFrameworkCore<TContext>()` | EntityFrameworkCore | Backing store |
 | `.UseDapper(factory, migrateSchema)` | Dapper | Backing store |
-| `.UseMongoDb(connStr, dbName, createIndexes)` | MongoDb | Backing store |
+| `.UseMongoDb(connStr, dbName, createIndexes)` | MongoDb | Backing store, provider-owned client |
+| `.UseMongoDb(databaseFactory, createIndexes)` | MongoDb | Backing store, reusing your own `IMongoClient` |
 | `.UseCustomCache<TCache>()` | Core | Replace the default cache |
 | `.WithCacheDuration(TimeSpan)` | Core | Override the 10-minute default |
 | `.UseAesEncryption(key, retiredKeys...)` | Core | Enable built-in AES-256-GCM encryption; retired keys decrypt only |

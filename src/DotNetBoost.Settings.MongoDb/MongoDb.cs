@@ -195,12 +195,27 @@ public sealed class MongoSettingStore : ISettingStore
 }
 
 /// <summary>
+/// Holds the database the settings store works against.
+/// <para>
+/// Deliberately a private type rather than a registration of <see cref="IMongoDatabase"/> or
+/// <see cref="IMongoClient"/>. Those are types an application may well register itself, and
+/// the last registration wins — so publishing them would mean this provider and the host
+/// application silently overriding one another's Mongo client.
+/// </para>
+/// </summary>
+internal sealed class SettingsMongoContext(IMongoDatabase database)
+{
+    public IMongoDatabase Database { get; } = database;
+}
+
+/// <summary>
 /// Creates the settings collection's indexes once at application start, so the store itself
 /// never has to. Registered by <c>UseMongoDb()</c> unless <c>createIndexes: false</c>.
 /// </summary>
-internal sealed class MongoIndexInitializer(IMongoDatabase database) : IHostedService
+internal sealed class MongoIndexInitializer(SettingsMongoContext context) : IHostedService
 {
-    public Task StartAsync(CancellationToken ct) => MongoSettingStore.EnsureIndexesAsync(database, ct);
+    public Task StartAsync(CancellationToken ct)
+        => MongoSettingStore.EnsureIndexesAsync(context.Database, ct);
 
     public Task StopAsync(CancellationToken ct) => Task.CompletedTask;
 }
