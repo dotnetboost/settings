@@ -68,21 +68,23 @@ public class SettingAccessorTests
         Assert.Equal(587, port);
     }
 
+    // The blocking Get()/Get(selector) pair these two used to cover is gone; the values they
+    // asserted on are the same ones GetAsync returns.
     [Fact]
-    public void Get_Sync_Works()
+    public async Task GetAsync_ReadsAStoredValue()
     {
         var rows = new[] { Row("Port", "2525", "System.Int32") };
         var (_, mgr) = BuildManager(rows);
-        var result = mgr.For<AccessorMailSettings>().Get();
+        var result = await mgr.For<AccessorMailSettings>().GetAsync();
         Assert.Equal(2525, result.Port);
     }
 
     [Fact]
-    public void Get_Selector_Sync_Works()
+    public async Task GetAsync_Selector_ReadsAStoredValue()
     {
         var rows = new[] { Row("Port", "2525", "System.Int32") };
         var (_, mgr) = BuildManager(rows);
-        var port = mgr.For<AccessorMailSettings>().Get(x => x.Port);
+        var port = await mgr.For<AccessorMailSettings>().GetAsync(x => x.Port);
         Assert.Equal(2525, port);
     }
 

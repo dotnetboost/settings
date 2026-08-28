@@ -328,11 +328,17 @@ public class EmailService(ISettingManager settings)
 |---|---|
 | `GetAsync(refreshCache, ct)` | Returns the full settings object |
 | `GetAsync(selector, refreshCache, ct)` | Returns one property |
-| `Get(...)` | Synchronous equivalents (avoid in async contexts) |
 | `SetAsync(model, ct)` | Persists the full object — validates, encrypts, audits, notifies |
 | `SetAsync(selector, value, ct)` | Updates a single property |
 | `ExistsAsync(allProperties, ct)` | Checks row existence |
 | `ClearAsync(ct)` | Deletes all settings for the group |
+| `GetVersionAsync(ct)` | Current revision, for conditional writes |
+| `SetAsync(model, expectedVersion, ct)` | Persists only if the group is still at that revision |
+
+> **There is no synchronous read.** A blocking `Get()` would park a thread-pool thread on
+> database I/O, and under load that starves the pool for the whole application — not just for
+> settings. Where a value is needed inside a synchronous lambda, read it once with `await`
+> beforehand and capture it; that is both correct and cheaper than resolving it per element.
 
 ---
 

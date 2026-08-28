@@ -17,17 +17,6 @@ public interface ISettingManager
 public interface ISettingAccessor<T> where T : new()
 {
     /// <summary>
-    /// Blocking overload of <see cref="GetAsync(bool, CancellationToken)"/>. Prefer the async
-    /// version; this one blocks the calling thread on the store read.
-    /// </summary>
-    T Get(bool refreshCache = false, CancellationToken cancellationToken = default);
-
-    /// <summary>Blocking overload of <see cref="GetAsync{TProp}"/>.</summary>
-    TProp Get<TProp>(Expression<Func<T, TProp>> selector,
-                     bool refreshCache = false,
-                     CancellationToken cancellationToken = default);
-
-    /// <summary>
     /// Materialises the whole settings group. Properties with no stored row fall back to
     /// <c>[SettingDefault]</c>, then to the value the class itself initialises them to.
     /// </summary>

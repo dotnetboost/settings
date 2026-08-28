@@ -65,13 +65,6 @@ public sealed partial class SettingManager : ISettingManager
     public ISettingAccessor<T> For<T>() where T : new()
         => new SettingAccessor<T>(this);
 
-    internal T Get<T>(bool refreshCache, CancellationToken ct) where T : new()
-        => GetAsync<T>(refreshCache, ct).ConfigureAwait(false).GetAwaiter().GetResult();
-
-    internal TProp Get<T, TProp>(Expression<Func<T, TProp>> selector, bool refreshCache, CancellationToken ct)
-        where T : new()
-        => CompileSelector(selector)(Get<T>(refreshCache, ct));
-
     internal async Task<T> GetAsync<T>(bool refreshCache, CancellationToken ct) where T : new()
     {
         var map = GetTypeMap(typeof(T));

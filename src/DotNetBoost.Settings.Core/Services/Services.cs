@@ -9,12 +9,6 @@ internal sealed class SettingAccessor<T> : ISettingAccessor<T> where T : new()
     private readonly SettingManager _m;
     internal SettingAccessor(SettingManager m) => _m = m;
 
-    public T Get(bool refreshCache = false, CancellationToken cancellationToken = default)
-        => _m.Get<T>(refreshCache, cancellationToken);
-
-    public TProp Get<TProp>(Expression<Func<T, TProp>> selector, bool refreshCache = false, CancellationToken cancellationToken = default)
-        => _m.Get(selector, refreshCache, cancellationToken);
-
     public Task<T> GetAsync(bool refreshCache = false, CancellationToken cancellationToken = default)
         => _m.GetAsync<T>(refreshCache, cancellationToken);
 
