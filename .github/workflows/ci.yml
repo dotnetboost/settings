@@ -252,15 +252,32 @@ jobs:
       - name: Determine version
         id: version
         run: |
+          set -euo pipefail
+
           if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
             VERSION="${GITHUB_REF#refs/tags/v}"
-          elif [[ "${GITHUB_REF}" == refs/heads/main ]]; then
-            BASE=$(git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//' || echo "1.0.0")
-            VERSION="${BASE}-preview.${{ github.run_number }}"
           else
-            BASE=$(git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//' || echo "1.0.0")
-            VERSION="${BASE}-dev.${{ github.run_number }}"
+            # `git describe | sed || echo` does not do what it looks like: `||` tests the exit
+            # status of the *pipeline*, which is sed's, and sed succeeds on empty input. With no
+            # tags in the repository the fallback never fired, BASE came out empty, and the
+            # version became "-preview.N" — which pack rejects deep inside MSBuild. Test the
+            # value, not the exit status.
+            BASE=$(git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//' || true)
+            [[ -n "${BASE}" ]] || BASE="1.0.0"
+
+            if [[ "${GITHUB_REF}" == refs/heads/main ]]; then
+              VERSION="${BASE}-preview.${{ github.run_number }}"
+            else
+              VERSION="${BASE}-dev.${{ github.run_number }}"
+            fi
           fi
+
+          # Fail here with a readable message rather than as a NuGet task stack trace.
+          if [[ ! "${VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-].*)?$ ]]; then
+            echo "::error::Computed package version '${VERSION}' is not valid SemVer"
+            exit 1
+          fi
+
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
           echo "::notice::Package version -> ${VERSION}"
 
