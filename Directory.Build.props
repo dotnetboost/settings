@@ -26,6 +26,7 @@
     <RepositoryUrl>https://github.com/dotnetboost/settings</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageIcon>icon.png</PackageIcon>
     <PackageTags>settings;configuration;dotnet;aspnetcore;efcore;dapper;mongodb</PackageTags>
 
     <Deterministic>true</Deterministic>
