@@ -3,7 +3,18 @@
 All notable changes to this project are documented here.
 This project follows [Semantic Versioning](https://semver.org/).
 
-## [1.0.0] — Unreleased
+## [Unreleased]
+
+_Nothing yet._
+
+## [1.0.0-preview.1] — 2026-08-29
+
+First public release, published to nuget.org as a prerelease.
+
+**The API is not frozen.** This preview exists to find out what real use turns up before 1.0.0
+commits to stability — several interfaces changed shape shortly before it, including
+`ISettingAccessor<T>`, `ISettingStore` and `UseMongoDb`. Expect breaking changes between
+previews; they will be listed here. Pin an exact version rather than a floating range.
 
 ### Added
 - Multi-targets **`net8.0`** (LTS) and **`net10.0`**. On `net8.0` the EF Core provider resolves the EF Core 8.x family; on `net10.0`, 10.x.
