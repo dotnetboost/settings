@@ -76,6 +76,30 @@ dotnet test --filter "Category!=Integration"
    `tests/DotNetBoost.Settings.IntegrationTests` inheriting the same contract
 5. Document it in the main `README.md`
 
+## Releasing
+
+Releases are cut by pushing a `v*.*.*` tag; CI derives the package version from it. Publishing
+to nuget.org uses **Trusted Publishing** rather than a stored API key: the workflow exchanges a
+GitHub OIDC token for a credential that lives one hour and is single-use, so there is no
+long-lived secret to leak or rotate.
+
+One-time setup on nuget.org (Account → Trusted Publishing → new policy):
+
+| Field | Value |
+|---|---|
+| Repository Owner | `dotnetboost` |
+| Repository | `settings` |
+| Workflow File | `ci.yml` — filename only, no `.github/workflows/` prefix |
+| Environment | `nuget-release` |
+
+Then add `NUGET_USER` as a repository secret: your nuget.org **profile name**, not your email.
+It is an identifier rather than a credential, but keeping it in secrets avoids baking a username
+into the workflow.
+
+Scoping the policy to the `nuget-release` environment is what makes that environment a real
+gate — add required reviewers to it and a publish cannot happen without an approval, because
+the credential is only issued inside it.
+
 ## Reporting bugs
 
 Use the [Bug Report template](.github/ISSUE_TEMPLATE/bug_report.md). Include a minimal repro where possible.
