@@ -618,6 +618,29 @@ The dashboard is at `http://localhost:3000`, the API reference at `http://localh
 Or start both — plus PostgreSQL and Redis — with one `dotnet run`; see
 [Running everything with .NET Aspire](#running-everything-with-net-aspire).
 
+### One group, end to end
+
+`MailSettings` from [`samples/SampleApp`](samples/SampleApp) — the class, its `[Sensitive]`
+property and its `MailSettingsValidator` — as the dashboard renders it:
+
+![The Mail Settings group in the dashboard: SMTP host, port, an SSL switch and a masked sensitive password field](assets/dashboard-mail-settings.png)
+
+The form is built from whatever `GET api/settings/mail-server` returned. `UseSsl` is a `bool`, so
+it renders as a switch; `Password` is `[Sensitive]`, so it is masked behind a reveal toggle and the
+value never touches the database unencrypted.
+
+![Mail Settings after a save: the password revealed, and a toast reading "Mail Settings saved — the new values are live, no redeploy needed"](assets/dashboard-mail-settings-saved.png)
+
+`Save changes` sends the whole group back with the `ETag` from the load as `If-Match`, so a save
+that lost a race is refused rather than silently overwriting the other writer. The saved values are
+live for the running application immediately.
+
+![Mail Settings with an empty SMTP Host: the field is outlined in red with the message 'Host' must not be empty](assets/dashboard-mail-settings-rejected.png)
+
+Clear the host and the API rejects the write. Each `ValidationProblemDetails` message comes back
+attached to the property it names — `RuleFor(x => x.Host).NotEmpty()` in `MailSettingsValidator`
+lands under **SMTP Host**, with nothing written.
+
 | File | Role |
 |---|---|
 | `app/utils/settings.ts` | Group registry — `route` must match `[SettingGroup("…")]` |
