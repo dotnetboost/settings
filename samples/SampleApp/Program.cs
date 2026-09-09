@@ -1,5 +1,8 @@
 using DotNetBoost.Settings.Core.Interfaces;
 using Microsoft.EntityFrameworkCore;
+using OpenTelemetry;
+using OpenTelemetry.Metrics;
+using OpenTelemetry.Trace;
 using SampleApp;
 using SampleApp.Caching;
 using SampleApp.Settings;
@@ -23,7 +26,34 @@ builder.AddServiceDefaults();
 //  block, uncomment the one you want, flip the matching ItemGroup in SampleApp.csproj,
 //  the provider block in AppHost.cs, and the DatabaseProvider in AppDbContext.cs.
 // ─────────────────────────────────────────────────────────────────────────────
-builder.AddNpgsqlDbContext<AppDbContext>("settingsdb");
+builder.Services.AddDbContext<AppDbContext>(opt =>
+    opt.UseNpgsql(
+        builder.Configuration.GetConnectionString("settingsdb"),
+        // A cold Postgres container refuses a few connections before it accepts any, so
+        // retry transient failures instead of failing the first request after a restart.
+        // Bounded deliberately: the readiness probe below runs through this same strategy,
+        // and the default policy (6 retries backing off to 30s) makes it take about a
+        // minute to report a database that is plainly gone.
+        npgsql => npgsql.EnableRetryOnFailure(
+            maxRetryCount: 3,
+            maxRetryDelay: TimeSpan.FromSeconds(2),
+            errorCodesToAdd: null)));
+
+// The two registrations below come free with Aspire.Npgsql.EntityFrameworkCore.PostgreSQL
+// and have to be written out when the plain provider is used, as it is here:
+//   readiness — without it /health answers Healthy while Postgres is unreachable, which
+//               makes it useless to anything that gates traffic on it. Nothing polls it
+//               today: add .WithHttpHealthCheck("/health") to the api resource in
+//               AppHost.cs to make WaitFor(api) wait on the database too.
+//   telemetry — Npgsql's ActivitySource and Meter, so a trace on the dashboard shows the
+//               SQL a request ran instead of stopping at the HTTP span, and the Metrics
+//               page carries the connection-pool counters.
+builder.Services.AddHealthChecks()
+    .AddDbContextCheck<AppDbContext>();
+
+builder.Services.AddOpenTelemetry()
+    .WithTracing(tracing => tracing.AddSource("Npgsql"))
+    .WithMetrics(metrics => metrics.AddMeter("Npgsql"));
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  Storage provider — ALTERNATIVE: SQL Server (Entity Framework Core)
