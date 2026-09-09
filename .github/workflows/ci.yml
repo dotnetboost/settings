@@ -262,8 +262,21 @@ jobs:
             # tags in the repository the fallback never fired, BASE came out empty, and the
             # version became "-preview.N" — which pack rejects deep inside MSBuild. Test the
             # value, not the exit status.
-            BASE=$(git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//' || true)
+            #
+            # The newest tag is itself usually a prerelease (v1.0.0-preview.1), so strip any
+            # -prerelease / +build suffix as well as the leading v and keep MAJOR.MINOR.PATCH.
+            # Appending -preview.N to a base that already carries a prerelease suffix yields
+            # 1.0.0-preview.1-preview.N: valid enough SemVer to pass the check below, and wrong
+            # enough to publish under a name nobody is looking for.
+            BASE=$(git describe --tags --abbrev=0 2>/dev/null | sed -E 's/^v//; s/[-+].*$//' || true)
             [[ -n "${BASE}" ]] || BASE="1.0.0"
+
+            # Anything the strip did not reduce to MAJOR.MINOR.PATCH (a v1.0 tag, say) would
+            # only surface later as an opaque pack failure.
+            if [[ ! "${BASE}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              echo "::error::Derived base version '${BASE}' is not MAJOR.MINOR.PATCH"
+              exit 1
+            fi
 
             if [[ "${GITHUB_REF}" == refs/heads/main ]]; then
               VERSION="${BASE}-preview.${{ github.run_number }}"
