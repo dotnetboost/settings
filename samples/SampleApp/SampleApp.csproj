@@ -22,7 +22,8 @@
     in Program.cs and the container started by aspire/DotNetBoost.Settings.AppHost.
   -->
   <ItemGroup Label="Storage provider — ACTIVE: PostgreSQL (EF Core)">
-    <PackageReference Include="Aspire.Npgsql.EntityFrameworkCore.PostgreSQL" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
+    <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks.EntityFrameworkCore" />
   </ItemGroup>
 
   <ItemGroup Label="Storage provider — ALTERNATIVE: MongoDB">

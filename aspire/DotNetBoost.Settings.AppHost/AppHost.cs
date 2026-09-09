@@ -85,6 +85,11 @@ var api = builder.AddProject<Projects.SampleApp>("api")
     .WithReference(redis)
     .WaitFor(redis)
     .WithEnvironment("Settings__EncryptionKey", encryptionKey)
+    // /health carries the AddDbContextCheck registered in samples/SampleApp/Program.cs, so
+    // this is what makes the dashboard's WaitFor(api) below hold until Postgres actually
+    // answers rather than merely until the process is up. MapDefaultEndpoints only maps
+    // /health in Development — drop this line if you ever publish this AppHost.
+    .WithHttpHealthCheck("/health")
     .WithExternalHttpEndpoints();
 
 // ── Dashboard — clients/dashboard (Nuxt) ─────────────────────────────────────

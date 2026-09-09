@@ -30,7 +30,9 @@
   </ItemGroup>
 
   <ItemGroup Label="Aspire — client integrations (consumed by the API)">
-    <PackageVersion Include="Aspire.Npgsql.EntityFrameworkCore.PostgreSQL" Version="13.5.2" />
+    <PackageVersion Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
+    <!-- Backs the AddDbContextCheck<AppDbContext>() readiness probe in samples/SampleApp. -->
+    <PackageVersion Include="Microsoft.Extensions.Diagnostics.HealthChecks.EntityFrameworkCore" Version="10.0.11" />
     <PackageVersion Include="Aspire.StackExchange.Redis" Version="13.5.2" />
     <!-- Referenced only when the matching provider block in Program.cs is uncommented. -->
     <PackageVersion Include="Aspire.Npgsql" Version="13.5.2" />
@@ -78,9 +80,7 @@
     <PackageVersion Include="Testcontainers.PostgreSql" Version="4.14.0" />
     <PackageVersion Include="Testcontainers.MongoDb" Version="4.14.0" />
     <PackageVersion Include="Testcontainers.MsSql" Version="4.14.0" />
-    <PackageVersion Include="Microsoft.Data.SqlClient" Version="6.1.4" />
-    <PackageVersion Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
-    <PackageVersion Include="Npgsql" Version="10.0.3" />
+    <PackageVersion Include="Microsoft.Data.SqlClient" Version="6.1.6" />
   </ItemGroup>
 
   <ItemGroup Label="Testing">
