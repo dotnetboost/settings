@@ -9,7 +9,7 @@ namespace DotNetBoost.Settings.IntegrationTests;
 /// </summary>
 public sealed class MongoDbFixture : IAsyncLifetime
 {
-    private readonly MongoDbContainer _container = new MongoDbBuilder("mongo:8").Build();
+    private readonly MongoDbContainer _container = new MongoDbBuilder("mongo:8.0.4").Build();
 
     private int _databaseCounter;
 
