@@ -190,16 +190,19 @@ builder.Services.AddSettings()
 
 | I want to… | Guide |
 |---|---|
-| Encrypt passwords and API keys in the database | [Encryption](https://github.com/dotnetboost/settings/blob/main/docs/encryption.md) |
-| Reject invalid values (`[Range]`, FluentValidation) | [Validation](https://github.com/dotnetboost/settings/blob/main/docs/validation.md) |
-| Run code when a setting changes | [Change notifications](https://github.com/dotnetboost/settings/blob/main/docs/change-notifications.md) |
-| See who changed what, and when | [Audit trail](https://github.com/dotnetboost/settings/blob/main/docs/audit-trail.md) |
+| Use SQL Server, PostgreSQL or MongoDB instead of SQLite | [Storage providers](https://github.com/dotnetboost/settings/blob/main/docs/storage-providers.md) |
 | Expose and secure the REST API | [REST API](https://github.com/dotnetboost/settings/blob/main/docs/rest-api.md) |
-| Run on several servers (Redis cache) | [Caching](https://github.com/dotnetboost/settings/blob/main/docs/caching.md) |
-| Stop two people overwriting each other's edits | [Reading & writing](https://github.com/dotnetboost/settings/blob/main/docs/reading-and-writing.md#concurrent-writes) |
+| Reject invalid values (`[Range]`, FluentValidation) | [Validation](https://github.com/dotnetboost/settings/blob/main/docs/validation.md) |
+| Encrypt passwords and API keys in the database | [Encryption](https://github.com/dotnetboost/settings/blob/main/docs/encryption.md) |
 | Rename a settings class safely, set defaults | [Defining settings](https://github.com/dotnetboost/settings/blob/main/docs/defining-settings.md) |
+| Run on several servers (Redis cache) | [Caching](https://github.com/dotnetboost/settings/blob/main/docs/caching.md) |
+| Run code when a setting changes | [Change notifications](https://github.com/dotnetboost/settings/blob/main/docs/change-notifications.md) |
+| Stop two people overwriting each other's edits | [Reading & writing](https://github.com/dotnetboost/settings/blob/main/docs/reading-and-writing.md#concurrent-writes) |
+| See who changed what, and when | [Audit trail](https://github.com/dotnetboost/settings/blob/main/docs/audit-trail.md) |
 | Give admins a web UI to edit settings | [Dashboard](https://github.com/dotnetboost/settings/blob/main/docs/dashboard.md) |
 | See every builder option | [Configuration reference](https://github.com/dotnetboost/settings/blob/main/docs/configuration-reference.md) |
+| Run the full demo stack (API, dashboard, PostgreSQL, Redis) | [.NET Aspire](https://github.com/dotnetboost/settings/blob/main/docs/aspire.md) |
+| Understand how it works inside, or contribute | [Architecture](https://github.com/dotnetboost/settings/blob/main/docs/architecture.md) |
 
 ---
 
