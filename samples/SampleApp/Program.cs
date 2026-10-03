@@ -128,7 +128,8 @@ settings
 builder.Services.AddScoped<MailSettingsChangedHandler>();
 
 // Generates the OpenAPI document that the Scalar UI reads. The settings endpoints
-// already carry WithName/WithSummary/Produces metadata, so they document themselves.
+// already carry WithName/WithSummary/Produces metadata and a "Settings" tag, so they
+// document and group themselves.
 builder.Services.AddOpenApi(options =>
     options.AddDocumentTransformer((document, _, _) =>
     {

@@ -15,6 +15,7 @@
 | `.UseCustomEncryption<TEncryptor>()` | Core | Plug in a custom encryptor |
 | `.UseAuditStore<TStore>()` | Core (+ EF Core impl) | Enable change history |
 | `.OnChanged<TSettings, THandler>()` | Core | Register a runtime change handler |
+| `.UseProjector<TSettings, TProjector>()` | Core (applied by API) | Reshape a group for `GET` only; never touches the `ETag` |
 | `.UseFluentValidation(assembly)` | FluentValidation | Register validators |
 | `.Build()` | Core | Validate configuration, return `IServiceCollection` |
 
