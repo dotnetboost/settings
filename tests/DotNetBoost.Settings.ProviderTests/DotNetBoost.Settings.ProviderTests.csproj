@@ -14,6 +14,9 @@
     <PackageReference Include="xunit" />
     <PackageReference Include="xunit.runner.visualstudio" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" />
+    <!-- A provider this package ships no column mappings for, so the inferring
+         overload's failure path can be executed rather than assumed. -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" />
     <PackageReference Include="Microsoft.Data.Sqlite" />
     <PackageReference Include="coverlet.collector" />
   </ItemGroup>

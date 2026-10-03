@@ -1,23 +1,21 @@
 using DotNetBoost.Settings.Core.Interfaces;
-using DotNetBoost.Settings.Core.Models;
 using DotNetBoost.Settings.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using SampleApp.Settings;
 
 namespace SampleApp;
 
-public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
-    : DbContext(options), ISettingDbContext
+public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(options)
 {
-    public DbSet<Setting> Settings => Set<Setting>();
-    public DbSet<SettingAuditEntry> SettingAudits => Set<SettingAuditEntry>();
-
-    // Must match the provider block active in Program.cs: it decides the column type
-    // chosen for Value (text / nvarchar(max) / longtext) and how RowVersion is mapped.
+    // The entire settings registration. No interface and no DbSet properties: the store
+    // reaches its entities through Set<T>(), and the engine — which decides the column type
+    // chosen for Value and how RowVersion is mapped — is read off the context, so switching
+    // the provider block in Program.cs needs no matching edit here.
+    //
+    // To pin the engine instead (a model built against one and migrated onto another):
+    // => modelBuilder.ApplySettingsConfiguration(DatabaseProvider.PostgreSql);
     protected override void OnModelCreating(ModelBuilder modelBuilder)
-        => modelBuilder.ApplySettingsConfiguration(DatabaseProvider.PostgreSql);
-        // => modelBuilder.ApplySettingsConfiguration(DatabaseProvider.SqlServer);
-        // => modelBuilder.ApplySettingsConfiguration(DatabaseProvider.Sqlite);
+        => modelBuilder.ApplySettingsConfiguration(this);
 }
 
 /// <summary>

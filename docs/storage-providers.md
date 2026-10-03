@@ -14,24 +14,35 @@ Pick one provider per application. Each is a separate package on top of `DotNetB
 dotnet add package DotNetBoost.Settings.EntityFrameworkCore --prerelease
 ```
 
-Add the two settings tables to your `DbContext`:
+Add the two settings tables to your `DbContext`. That one call is the whole registration —
+your context needs no interface and no `DbSet` properties, because the store reaches its
+entities through `Set<T>()`:
 
 ```csharp
-using DotNetBoost.Settings.Core.Models;
 using DotNetBoost.Settings.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 
-public class AppDbContext(DbContextOptions<AppDbContext> options)
-    : DbContext(options), ISettingDbContext
+public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(options)
 {
-    public DbSet<Setting>           Settings      => Set<Setting>();
-    public DbSet<SettingAuditEntry> SettingAudits => Set<SettingAuditEntry>();
-
     protected override void OnModelCreating(ModelBuilder mb)
-        => mb.ApplySettingsConfiguration(DatabaseProvider.Sqlite);
-        // Options: SqlServer | PostgreSql | Sqlite
+        => mb.ApplySettingsConfiguration(this);
 }
 ```
+
+The engine — which decides the `Value` column type and how `RowVersion` is mapped — is read
+off the context, so switching provider needs no matching edit here. Name it explicitly when
+you need to override that, for a model built against one engine and migrated onto another:
+
+```csharp
+protected override void OnModelCreating(ModelBuilder mb)
+    => mb.ApplySettingsConfiguration(DatabaseProvider.SqlServer);
+    // Options: SqlServer | PostgreSql | Sqlite
+```
+
+> **Upgrading from `1.0.0-preview.1`?** `ISettingDbContext` is obsolete and does nothing.
+> Delete `: ISettingDbContext` and the two `DbSet` properties; nothing else changes.
+> `UseEntityFrameworkCore<TContext>()` now also registers your context as the scoped
+> `DbContext`, which is what lets `UseAuditStore<EfCoreAuditStore>()` resolve.
 
 ```csharp
 builder.Services.AddDbContext<AppDbContext>(o => o.UseSqlite("Data Source=app.db"));

@@ -6,14 +6,14 @@ using Microsoft.EntityFrameworkCore;
 
 namespace DotNetBoost.Settings.IntegrationTests.Stores;
 
-public sealed class PostgresDbContext(DbContextOptions<PostgresDbContext> options)
-    : DbContext(options), ISettingDbContext
+/// <summary>
+/// Configured through the inferring overload, so the Npgsql provider name really does map to
+/// <c>DatabaseProvider.PostgreSql</c> against a live server rather than only in a unit test.
+/// </summary>
+public sealed class PostgresDbContext(DbContextOptions<PostgresDbContext> options) : DbContext(options)
 {
-    public DbSet<Setting>           Settings      => Set<Setting>();
-    public DbSet<SettingAuditEntry> SettingAudits => Set<SettingAuditEntry>();
-
     protected override void OnModelCreating(ModelBuilder modelBuilder)
-        => modelBuilder.ApplySettingsConfiguration(DatabaseProvider.PostgreSql);
+        => modelBuilder.ApplySettingsConfiguration(this);
 }
 
 /// <summary>
@@ -65,8 +65,8 @@ public sealed class EfCorePostgresStoreTests(PostgreSqlFixture fixture)
     {
         var ctx = await NewContextAsync();
 
-        ctx.Settings.Add(new Setting { Group = "Mail", Key = "Host", Value = "a", Type = "System.String" });
-        ctx.Settings.Add(new Setting { Group = "Mail", Key = "Host", Value = "b", Type = "System.String" });
+        ctx.Set<Setting>().Add(new Setting { Group = "Mail", Key = "Host", Value = "a", Type = "System.String" });
+        ctx.Set<Setting>().Add(new Setting { Group = "Mail", Key = "Host", Value = "b", Type = "System.String" });
 
         // UX_Settings_Group_Key must be enforced by the database, not just by application code.
         await Assert.ThrowsAsync<DbUpdateException>(() => ctx.SaveChangesAsync());

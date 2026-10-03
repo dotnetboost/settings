@@ -1,17 +1,16 @@
-using DotNetBoost.Settings.Core.Models;
 using DotNetBoost.Settings.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 
 namespace DotNetBoost.Settings.ProviderTests.Stores;
 
-public sealed class TestDbContext(DbContextOptions<TestDbContext> options)
-    : DbContext(options), ISettingDbContext
+/// <summary>
+/// The whole registration a consuming context needs: no interface, no DbSet properties, and
+/// the engine taken from the context rather than restated.
+/// </summary>
+public sealed class TestDbContext(DbContextOptions<TestDbContext> options) : DbContext(options)
 {
-    public DbSet<Setting>           Settings      => Set<Setting>();
-    public DbSet<SettingAuditEntry> SettingAudits => Set<SettingAuditEntry>();
-
     protected override void OnModelCreating(ModelBuilder modelBuilder)
-        => modelBuilder.ApplySettingsConfiguration(DatabaseProvider.Sqlite);
+        => modelBuilder.ApplySettingsConfiguration(this);
 }
 
 public sealed class EfCoreSettingStoreTests : SettingStoreContractTests, IDisposable
