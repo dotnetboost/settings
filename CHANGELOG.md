@@ -5,7 +5,50 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-_Nothing yet._
+### Added
+- **`ISettingProjector<T>`** — a read-path hook for serving a group as something other than its
+  stored values: a display name in the request's language, an image id resolved to a URL, a
+  field masked for display. Register with `.UseProjector<TSettings, TProjector>()`; the
+  generated `GET /api/settings/{route}` applies it. Three constraints are what make it safe to
+  have, and all three are covered by tests: it is **read path only**, so `POST` never consults
+  it and a projector cannot influence what is stored; it is **never applied to the `ETag`**,
+  which keeps describing the stored revision, so conditional writes go on protecting the stored
+  values; and with no projector registered the response is byte for byte what it was. Without
+  this hook, composing settings with anything else meant standing up a parallel endpoint and
+  leaving the generated one returning a value the UI never shows.
+- `MapSettingsEndpoints` now tags its routes `Settings`, matching the sibling DotNetBoost
+  packages. The `app.MapGroup("").WithTags("Settings").MapSettingsEndpoints()` dance — an empty
+  prefix whose only purpose was to carry a tag — becomes `app.MapSettingsEndpoints()`.
+- `ApplySettingsConfiguration(DbContext)`: an overload that reads the engine off the context, so
+  `OnModelCreating` is `modelBuilder.ApplySettingsConfiguration(this)` and switching provider
+  needs no matching edit. The explicit `ApplySettingsConfiguration(DatabaseProvider)` overload
+  stays for overriding it — a model built against one engine and migrated onto another. An
+  unrecognised EF Core provider throws naming the overload to use rather than guessing a column
+  type, which would surface much later as truncated settings.
+
+### Changed
+- **The EF Core store takes a plain `DbContext`.** `EfCoreSettingStore` and `EfCoreAuditStore`
+  reach their entities through `Set<Setting>()` / `Set<SettingAuditEntry>()`, and
+  `UseEntityFrameworkCore<TContext>` no longer constrains `TContext` beyond `DbContext`. A
+  consuming context's whole settings registration is now one `ApplySettingsConfiguration` call
+  in `OnModelCreating` — no interface, no `DbSet` properties the library mostly never read.
+  `ISettingDbContext` is **obsolete** and does nothing; delete `: ISettingDbContext` and the two
+  `DbSet` properties from your context and nothing else changes. It will be removed in the next
+  release. `UseEntityFrameworkCore<TContext>` also registers `TContext` as the scoped
+  `DbContext`, which is what lets `.UseAuditStore<EfCoreAuditStore>()` go on resolving.
+
+### Fixed
+- **`GetAsync` no longer hands every caller the same mutable object.** The cache held the mapped
+  settings instance, so assigning to a property of what you read wrote into the entry every
+  later reader of that group was served from — including `GET /api/settings/{group}`, which then
+  returned the mutated value as though it were stored. The cache now holds the stored rows and
+  each read materialises its own model; the round trip to the store is what the cache was ever
+  worth, and the mapping is reflection over a handful of properties. `SetAsync(selector, value)`
+  was mutating the cached instance for the same reason, and is fixed by the same change.
+  Two consequences: a `[Sensitive]` value is decrypted per read rather than once per cache
+  entry, and a distributed `ISettingCache` is now handed `Setting[]` — so what lands in Redis is
+  the stored ciphertext rather than a decrypted model. A custom cache that serialises needs no
+  change beyond the new type.
 
 ## [1.0.0-preview.1] — 2026-08-29
 
