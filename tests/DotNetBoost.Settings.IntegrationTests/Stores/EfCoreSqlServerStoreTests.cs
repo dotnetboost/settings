@@ -6,14 +6,15 @@ using Microsoft.EntityFrameworkCore;
 
 namespace DotNetBoost.Settings.IntegrationTests.Stores;
 
-public sealed class SqlServerDbContext(DbContextOptions<SqlServerDbContext> options)
-    : DbContext(options), ISettingDbContext
+/// <summary>
+/// Configured through the inferring overload, so the SQL Server provider name really does
+/// map to <c>DatabaseProvider.SqlServer</c> — nvarchar(max) and a genuine rowversion — against
+/// a live server rather than only in a unit test.
+/// </summary>
+public sealed class SqlServerDbContext(DbContextOptions<SqlServerDbContext> options) : DbContext(options)
 {
-    public DbSet<Setting>           Settings      => Set<Setting>();
-    public DbSet<SettingAuditEntry> SettingAudits => Set<SettingAuditEntry>();
-
     protected override void OnModelCreating(ModelBuilder modelBuilder)
-        => modelBuilder.ApplySettingsConfiguration(DatabaseProvider.SqlServer);
+        => modelBuilder.ApplySettingsConfiguration(this);
 }
 
 /// <summary>

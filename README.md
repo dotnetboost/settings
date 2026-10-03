@@ -86,15 +86,12 @@ public class MailSettings
     public int Port { get; set; } = 587;
 }
 
-// Your EF Core context: add the two settings tables to it.
-public class AppDbContext(DbContextOptions<AppDbContext> options)
-    : DbContext(options), ISettingDbContext
+// Your EF Core context: add the two settings tables to it. One line, no interface
+// and no DbSet properties — the engine is read off the context.
+public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(options)
 {
-    public DbSet<Setting> Settings => Set<Setting>();
-    public DbSet<SettingAuditEntry> SettingAudits => Set<SettingAuditEntry>();
-
     protected override void OnModelCreating(ModelBuilder modelBuilder)
-        => modelBuilder.ApplySettingsConfiguration(DatabaseProvider.Sqlite);
+        => modelBuilder.ApplySettingsConfiguration(this);
 }
 ```
 
