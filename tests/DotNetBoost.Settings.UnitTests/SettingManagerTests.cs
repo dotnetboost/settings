@@ -45,8 +45,7 @@ public class SettingManagerTests
     public async Task GetAsync_UsesCache_WhenHit()
     {
         var (store, cache, mgr) = Build();
-        var cached = new MailSettings { Port = 9999 };
-        cache.Setup(x => x.TryGetValue<MailSettings>("dnb:setting:MailSettings", out cached)).Returns(true);
+        SetCachedRows(cache, Rows("MailSettings", ("Port", "9999", "System.Int32")));
 
         var result = await mgr.For<MailSettings>().GetAsync();
 
@@ -58,8 +57,7 @@ public class SettingManagerTests
     public async Task GetAsync_BypassesCache_WhenRefreshCacheTrue()
     {
         var (store, cache, mgr) = Build();
-        var cached = new MailSettings { Port = 9999 };
-        cache.Setup(x => x.TryGetValue<MailSettings>("dnb:setting:MailSettings", out cached)).Returns(true);
+        SetCachedRows(cache, Rows("MailSettings", ("Port", "9999", "System.Int32")));
         store.Setup(x => x.GetGroupAsync("MailSettings", default)).ReturnsAsync([]);
 
         await mgr.For<MailSettings>().GetAsync(refreshCache: true);
@@ -68,15 +66,56 @@ public class SettingManagerTests
     }
 
     [Fact]
-    public async Task GetAsync_StoresResultInCache()
+    public async Task GetAsync_StoresTheStoredRowsInCache_NotTheModel()
     {
+        // What goes into the cache decides what every later reader is served. Rows are
+        // immutable as far as the manager is concerned; a model is not.
         var (store, cache, mgr) = Build();
-        SetCacheMiss<MailSettings>(cache);
-        store.Setup(x => x.GetGroupAsync("MailSettings", default)).ReturnsAsync([]);
+        SetCacheMiss<Setting[]>(cache);
+        store.Setup(x => x.GetGroupAsync("MailSettings", default))
+             .ReturnsAsync(Rows("MailSettings", ("Port", "587", "System.Int32")));
 
         await mgr.For<MailSettings>().GetAsync();
 
-        cache.Verify(x => x.Set("dnb:setting:MailSettings", It.IsAny<MailSettings>(), It.IsAny<TimeSpan>()), Times.Once);
+        cache.Verify(x => x.Set("dnb:setting:MailSettings",
+            It.Is<Setting[]>(r => r.Length == 1 && r[0].Key == "Port"), It.IsAny<TimeSpan>()), Times.Once);
+    }
+
+    /// <summary>
+    /// The whole point of caching rows rather than the model: two reads of a group must not
+    /// share an object, or assigning to a property of one quietly rewrites what every later
+    /// reader — including <c>GET /api/settings/{group}</c> — is served.
+    /// </summary>
+    [Fact]
+    public async Task GetAsync_MutatingTheResult_DoesNotAffectLaterReads()
+    {
+        var (store, cache, mgr) = Build();
+        UseRealCache(cache);
+        store.Setup(x => x.GetGroupAsync("MailSettings", default))
+             .ReturnsAsync(Rows("MailSettings", ("Host", "smtp.example.com", "System.String")));
+
+        var first = await mgr.For<MailSettings>().GetAsync();
+        first.Host = "mutated.example.com";
+
+        var second = await mgr.For<MailSettings>().GetAsync();
+
+        Assert.Equal("smtp.example.com", second.Host);
+        Assert.NotSame(first, second);
+        store.Verify(x => x.GetGroupAsync("MailSettings", default), Times.Once);   // still one round trip
+    }
+
+    [Fact]
+    public async Task GetAsync_MutatingAPropertyRead_DoesNotAffectLaterReads()
+    {
+        var (store, cache, mgr) = Build();
+        UseRealCache(cache);
+        store.Setup(x => x.GetGroupAsync("MailSettings", default))
+             .ReturnsAsync(Rows("MailSettings", ("Port", "587", "System.Int32")));
+
+        var model = await mgr.For<MailSettings>().GetAsync();
+        model.Port = 2525;
+
+        Assert.Equal(587, await mgr.For<MailSettings>().GetAsync(m => m.Port));
     }
 
     [Fact]
@@ -207,6 +246,26 @@ public class SettingManagerTests
         T? nothing = default;
         cache.Setup(x => x.TryGetValue<T>(It.IsAny<string>(), out nothing)).Returns(false);
     }
+
+    private static void SetCachedRows(Mock<ISettingCache> cache, List<Setting> rows)
+    {
+        var cached = rows.ToArray();
+        cache.Setup(x => x.TryGetValue<Setting[]>("dnb:setting:MailSettings", out cached!)).Returns(true);
+    }
+
+    /// <summary>Backs the mock with a real dictionary, so Set is visible to a later TryGetValue.</summary>
+    private static void UseRealCache(Mock<ISettingCache> cache)
+    {
+        var backing = new Dictionary<string, Setting[]>(StringComparer.Ordinal);
+
+        cache.Setup(x => x.Set(It.IsAny<string>(), It.IsAny<Setting[]>(), It.IsAny<TimeSpan>()))
+             .Callback<string, Setting[], TimeSpan>((k, v, _) => backing[k] = v);
+
+        cache.Setup(x => x.TryGetValue<Setting[]>(It.IsAny<string>(), out It.Ref<Setting[]?>.IsAny))
+             .Returns(new TryGetRows((string k, out Setting[]? v) => backing.TryGetValue(k, out v)));
+    }
+
+    private delegate bool TryGetRows(string key, out Setting[]? value);
 
     private static List<Setting> Rows(string group, params (string Key, string Value, string Type)[] data)
         => data.Select(d => new Setting { Group = group, Key = d.Key, Value = d.Value, Type = d.Type }).ToList();

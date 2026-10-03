@@ -31,6 +31,11 @@ public class EmailService(ISettingManager settings)
 | `GetVersionAsync(ct)` | Current revision, for conditional writes |
 | `SetAsync(model, expectedVersion, ct)` | Persists only if the group is still at that revision |
 
+> **Each read returns its own object.** `GetAsync` materialises a fresh instance every time,
+> even on a cache hit — the cache holds the stored rows, not the model. Assigning to a property
+> of what you read changes nothing anyone else sees; persist it with `SetAsync`. See
+> [Caching](caching.md).
+
 > **There is no synchronous read.** A blocking `Get()` would park a thread-pool thread on
 > database I/O, and under load that starves the pool for the whole application — not just for
 > settings. Where a value is needed inside a synchronous lambda, read it once with `await`

@@ -220,8 +220,8 @@ public class DecryptionFailureTests
              ]);
 
         var cache = new Mock<ISettingCache>();
-        SecretSettings? miss = null;
-        cache.Setup(x => x.TryGetValue<SecretSettings>(It.IsAny<string>(), out miss)).Returns(false);
+        Setting[]? miss = null;
+        cache.Setup(x => x.TryGetValue<Setting[]>(It.IsAny<string>(), out miss)).Returns(false);
 
         var options = new SettingOptions();
         configure?.Invoke(options);

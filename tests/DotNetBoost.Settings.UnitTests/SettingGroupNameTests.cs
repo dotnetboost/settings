@@ -100,7 +100,7 @@ public class SettingGroupNameTests
 
         await mgr.For<RenamedSettings>().GetAsync();
 
-        cache.Verify(x => x.Set("dnb:setting:billing-v1", It.IsAny<RenamedSettings>(), It.IsAny<TimeSpan>()), Times.Once);
+        cache.Verify(x => x.Set("dnb:setting:billing-v1", It.IsAny<Setting[]>(), It.IsAny<TimeSpan>()), Times.Once);
     }
 
     [Fact]
@@ -111,7 +111,7 @@ public class SettingGroupNameTests
 
         await mgr.For<RouteOnlySettings>().GetAsync();
 
-        cache.Verify(x => x.Set("dnb:setting:RouteOnlySettings", It.IsAny<RouteOnlySettings>(), It.IsAny<TimeSpan>()), Times.Once);
+        cache.Verify(x => x.Set("dnb:setting:RouteOnlySettings", It.IsAny<Setting[]>(), It.IsAny<TimeSpan>()), Times.Once);
     }
 
     private static (Mock<ISettingStore>, ISettingManager) Build<T>() where T : new()
@@ -126,8 +126,8 @@ public class SettingGroupNameTests
         store.Setup(x => x.GetGroupAsync(It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync([]);
 
         var cache = new Mock<ISettingCache>();
-        T? miss = default;
-        cache.Setup(x => x.TryGetValue<T>(It.IsAny<string>(), out miss)).Returns(false);
+        Setting[]? miss = null;
+        cache.Setup(x => x.TryGetValue<Setting[]>(It.IsAny<string>(), out miss)).Returns(false);
 
         var mgr = new SettingManager(store.Object, cache.Object,
             new ServiceCollection().BuildServiceProvider(), NullLogger<SettingManager>.Instance);
