@@ -254,7 +254,7 @@ public class SettingOptionsTests
         await mgr.For<OptionsSettings>().GetAsync();
 
         cache.Verify(x => x.Set("dnb:setting:OptionsSettings",
-            It.IsAny<OptionsSettings>(), TimeSpan.FromMinutes(5)), Times.Once);
+            It.IsAny<Setting[]>(), TimeSpan.FromMinutes(5)), Times.Once);
     }
 
     [Fact]
@@ -265,7 +265,7 @@ public class SettingOptionsTests
         await mgr.For<OptionsSettings>().GetAsync();
 
         cache.Verify(x => x.Set("dnb:setting:OptionsSettings",
-            It.IsAny<OptionsSettings>(), TimeSpan.FromMinutes(10)), Times.Once);
+            It.IsAny<Setting[]>(), TimeSpan.FromMinutes(10)), Times.Once);
     }
 
     [Fact]
@@ -296,8 +296,8 @@ public class SettingOptionsTests
              .ReturnsAsync([]);
 
         var cache = new Mock<ISettingCache>();
-        OptionsSettings? miss = null;
-        cache.Setup(x => x.TryGetValue<OptionsSettings>(It.IsAny<string>(), out miss)).Returns(false);
+        Setting[]? miss = null;
+        cache.Setup(x => x.TryGetValue<Setting[]>(It.IsAny<string>(), out miss)).Returns(false);
 
         var services = new ServiceCollection();
         services.AddSingleton(store.Object);

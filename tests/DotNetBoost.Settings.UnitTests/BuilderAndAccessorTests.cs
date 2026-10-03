@@ -94,8 +94,8 @@ public class SettingAccessorTests
         var store = new Mock<ISettingStore>();
         store.Setup(x => x.CountAsync("AccessorMailSettings", default)).ReturnsAsync(1);
         var cache = new Mock<ISettingCache>();
-        AccessorMailSettings? miss = null;
-        cache.Setup(x => x.TryGetValue<AccessorMailSettings>(It.IsAny<string>(), out miss)).Returns(false);
+        Setting[]? miss = null;
+        cache.Setup(x => x.TryGetValue<Setting[]>(It.IsAny<string>(), out miss)).Returns(false);
         var mgr = new SettingManager(store.Object, cache.Object,
             new ServiceCollection().BuildServiceProvider(), NullLogger<SettingManager>.Instance);
 
@@ -106,8 +106,8 @@ public class SettingAccessorTests
     {
         var store = new Mock<ISettingStore>();
         var cache = new Mock<ISettingCache>();
-        AccessorMailSettings? miss = null;
-        cache.Setup(x => x.TryGetValue<AccessorMailSettings>(It.IsAny<string>(), out miss)).Returns(false);
+        Setting[]? miss = null;
+        cache.Setup(x => x.TryGetValue<Setting[]>(It.IsAny<string>(), out miss)).Returns(false);
         store.Setup(x => x.GetGroupAsync("AccessorMailSettings", default)).ReturnsAsync(rows.ToList());
         var mgr = new SettingManager(store.Object, cache.Object,
             new ServiceCollection().BuildServiceProvider(), NullLogger<SettingManager>.Instance);

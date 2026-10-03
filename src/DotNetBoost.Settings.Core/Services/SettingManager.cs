@@ -65,26 +65,39 @@ public sealed partial class SettingManager : ISettingManager
     public ISettingAccessor<T> For<T>() where T : new()
         => new SettingAccessor<T>(this);
 
+    /// <summary>
+    /// Reads a group, serving the stored rows from the cache when they are there.
+    /// <para>
+    /// What is cached is the rows, never the model: every caller gets a model of its own, so
+    /// assigning to a property of one read cannot change what the next read returns. Caching
+    /// the model instead would hand the same mutable object to every reader of the group —
+    /// including <c>GET /api/settings/{group}</c>, which would then serve a value nobody
+    /// stored. The round trip to the store is what the cache is for; <see cref="MapToModel"/>
+    /// is reflection over a handful of properties and is cheap to repeat.
+    /// </para>
+    /// </summary>
     internal async Task<T> GetAsync<T>(bool refreshCache, CancellationToken ct) where T : new()
     {
         var map = GetTypeMap(typeof(T));
         var key = CacheKey(map);
 
-        if (!refreshCache && TryFromCache<T>(key, out var fast))
-            return fast!;
+        if (!refreshCache && TryRowsFromCache(key, out var fast))
+            return MapToModel<T>(fast!);
 
         var locker = Locks.GetOrAdd(key, _ => new SemaphoreSlim(1, 1));
         await locker.WaitAsync(ct).ConfigureAwait(false);
         try
         {
-            if (!refreshCache && TryFromCache<T>(key, out var hit))
-                return hit!;
+            if (!refreshCache && TryRowsFromCache(key, out var hit))
+                return MapToModel<T>(hit!);
 
-            var rows  = await _store.GetGroupAsync(map.GroupName, ct).ConfigureAwait(false);
-            var model = MapToModel<T>(rows);
+            var rows = await _store.GetGroupAsync(map.GroupName, ct).ConfigureAwait(false);
 
-            _cache.Set(key, model, CacheDuration);
-            return model;
+            // A concrete array rather than the store's own list: a distributed ISettingCache
+            // has to serialise this, and an interface is not something every serialiser can
+            // round-trip.
+            _cache.Set(key, rows as Setting[] ?? [.. rows], CacheDuration);
+            return MapToModel<T>(rows);
         }
         finally
         {
@@ -404,8 +417,8 @@ public sealed partial class SettingManager : ISettingManager
         throw new InvalidOperationException($"Selector must point directly at a property on {typeof(T).Name}.");
     }
 
-    private bool TryFromCache<T>(string key, out T? value)
-        => _cache.TryGetValue(key, out value) && value is not null;
+    private bool TryRowsFromCache(string key, out Setting[]? rows)
+        => _cache.TryGetValue(key, out rows) && rows is not null;
 
     private static string CacheKey<T>() => CacheKey(GetTypeMap(typeof(T)));
 
