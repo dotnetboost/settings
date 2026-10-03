@@ -21,6 +21,9 @@ internal sealed class TestApp : IAsyncDisposable
 
     public HttpClient Client { get; }
 
+    /// <summary>The running host's root provider, for tests that need to resolve a service.</summary>
+    public IServiceProvider Services => _app.Services;
+
     private TestApp(WebApplication app)
     {
         _app    = app;

@@ -16,6 +16,48 @@ Registers, per `[SettingGroup]` class:
 | `POST` | `/api/settings/{route}` | Validate + persist; honours `If-Match`, `412` on a lost race |
 | `GET`  | `/api/settings/{route}/audit` | Change history (`404` if no audit store configured) |
 
+All three carry the OpenAPI tag `Settings`, so they group themselves in Swagger or Scalar
+without being wrapped in a `MapGroup("")` purely to hang a tag on.
+
+## Reshaping what GET returns
+
+`GET` serves the stored values. When the representation your UI needs is not the representation
+you store — a display name in the request's language, an image id resolved to a URL, a field
+masked for display — register an `ISettingProjector<T>`:
+
+```csharp
+public sealed class BrandingProjector(ITranslator translator) : ISettingProjector<BrandingSettings>
+{
+    public async Task<object> ProjectAsync(BrandingSettings group, CancellationToken ct = default)
+        => new
+        {
+            StoreName = await translator.ForCurrentRequestAsync(group.StoreName, ct),
+            group.PrimaryColor
+        };
+}
+```
+
+```csharp
+builder.Services.AddSettings()
+    .UseEntityFrameworkCore<AppDbContext>()
+    .UseProjector<BrandingSettings, BrandingProjector>()
+    .Build();
+```
+
+Projectors are registered scoped, so they can depend on anything else in the request scope.
+Three rules make this safe to have:
+
+- **Read path only.** `POST` never consults a projector, so it cannot influence what is stored.
+  The projected shape is an output shape; it is not something you can post back.
+- **Never applied to the `ETag`.** The tag keeps describing the stored revision. A tag derived
+  from projected output would move with the request's language, and `If-Match` would stop
+  protecting anything.
+- **No projector registered is the previous behaviour, byte for byte.**
+
+Programmatic reads are unaffected: `For<T>().GetAsync()` always returns the stored group.
+Note that the OpenAPI schema for `GET` still describes `T` — the document cannot know what your
+projector returns, so describe the projected shape yourself if the generated document matters.
+
 ## Securing the endpoints
 
 **The generated endpoints are anonymous by default.** The library deliberately does not impose an

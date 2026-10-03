@@ -105,6 +105,29 @@ namespace Microsoft.Extensions.DependencyInjection
         }
     }
 
+    /// <summary>Builder methods for the read-path projection hook.</summary>
+    public static class ProjectionBuilderExtensions
+    {
+        /// <summary>
+        /// Registers a projector that shapes <typeparamref name="TSettings"/> for
+        /// <c>GET /api/settings/{route}</c>. Registered scoped, so a projector may depend on
+        /// anything else the request scope offers.
+        /// <para>
+        /// Read path only, and never applied to the <c>ETag</c> — see
+        /// <see cref="ISettingProjector{T}"/>. Programmatic reads through
+        /// <c>ISettingManager</c> are unaffected.
+        /// </para>
+        /// </summary>
+        public static SettingBuilder UseProjector<TSettings, TProjector>(this SettingBuilder builder)
+            where TSettings  : new()
+            where TProjector : class, ISettingProjector<TSettings>
+        {
+            ArgumentNullException.ThrowIfNull(builder);
+            builder.Services.AddScoped<ISettingProjector<TSettings>, TProjector>();
+            return builder;
+        }
+    }
+
     /// <summary>Builder methods for runtime change notifications.</summary>
     public static class ChangeNotificationBuilderExtensions
     {

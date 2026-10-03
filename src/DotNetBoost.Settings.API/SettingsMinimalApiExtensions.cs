@@ -31,6 +31,18 @@ public static class SettingsMinimalApiExtensions
     private static readonly ConcurrentDictionary<Type, Func<object, CancellationToken, Task<string>>>
         VersionDelegates = new();
 
+    private static readonly ConcurrentDictionary<Type, Type> ProjectorTypes = new();
+
+    private static readonly ConcurrentDictionary<Type, Func<object, object, CancellationToken, Task<object>>>
+        ProjectorDelegates = new();
+
+    /// <summary>
+    /// OpenAPI tag the generated endpoints are grouped under, matching how the sibling
+    /// DotNetBoost packages tag theirs. Without it every consumer has to wrap the call in
+    /// <c>MapGroup("")</c> purely to carry a tag.
+    /// </summary>
+    private const string EndpointTag = "Settings";
+
     private static readonly JsonSerializerOptions JsonOpts =
         new() { PropertyNameCaseInsensitive = true };
 
@@ -62,7 +74,7 @@ public static class SettingsMinimalApiExtensions
         {
             var attr  = type.GetCustomAttribute<SettingGroupAttribute>()!;
             var auth  = type.GetCustomAttribute<AuthorizeAttribute>();
-            var group = endpoints.MapGroup($"api/settings/{attr.Route}");
+            var group = endpoints.MapGroup($"api/settings/{attr.Route}").WithTags(EndpointTag);
 
             if (auth is not null)
                 group.RequireAuthorization(auth);
@@ -87,7 +99,22 @@ public static class SettingsMinimalApiExtensions
             var getter = GetterDelegates.GetOrAdd(type, CreateGetterDelegate);
             var result = await getter(accessor, false, ct).ConfigureAwait(false);
 
+            // The tag describes the STORED revision and is set from the version read above —
+            // deliberately before projection, and never derived from it. A tag covering
+            // projected output would move with the request's language, or with data owned by
+            // some other component, and If-Match would stop protecting the stored values.
             ctx.Response.Headers.ETag = $"\"{version}\"";
+
+            // Resolved from the request scope: a projector is registered scoped and is
+            // expected to depend on per-request state. Nothing registered means the group is
+            // serialised exactly as before.
+            var projectorType = ProjectorTypes.GetOrAdd(type, MakeProjectorType);
+            if (ctx.RequestServices.GetService(projectorType) is { } projector && result is not null)
+            {
+                result = await ProjectorDelegates.GetOrAdd(type, CreateProjectorDelegate)(projector, result, ct)
+                    .ConfigureAwait(false);
+            }
+
             return Results.Ok(result);
         })
         .WithName($"Get{type.Name}")
@@ -197,6 +224,21 @@ public static class SettingsMinimalApiExtensions
         {
             var task = (Task)method.Invoke(accessor, [body, expectedVersion, ct])!;
             await task.ConfigureAwait(false);
+        };
+    }
+
+    private static Type MakeProjectorType(Type type)
+        => typeof(ISettingProjector<>).MakeGenericType(type);
+
+    private static Func<object, object, CancellationToken, Task<object>> CreateProjectorDelegate(Type type)
+    {
+        var method = MakeProjectorType(type).GetMethod(
+            nameof(ISettingProjector<object>.ProjectAsync), [type, typeof(CancellationToken)])!;
+
+        return async (projector, group, ct) =>
+        {
+            var task = (Task<object>)method.Invoke(projector, [group, ct])!;
+            return await task.ConfigureAwait(false);
         };
     }
 
