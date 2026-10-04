@@ -54,3 +54,12 @@ The browser never calls the API directly: Nitro proxies `/api/settings/**` to
 `NUXT_SETTINGS_API_URL`, so the API needs no CORS configuration. See
 [`clients/dashboard/README.md`](../clients/dashboard/README.md) for the full setup.
 
+## Generating the form instead of hardcoding it
+
+A client does not have to know your settings classes up front. `GET /api/settings` lists the
+groups and `GET /api/settings/{route}/schema` describes one — property names as the `GET` body
+spells them, types, defaults, which properties are `[Sensitive]`, and the validation bounds your
+validators enforce. See [Discovery endpoints](discovery-endpoints.md).
+
+That is the alternative to a hardcoded field list with its own copy of the bounds — a copy which
+is, by construction, enforced nowhere.

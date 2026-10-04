@@ -14,9 +14,14 @@ Registers, per `[SettingGroup]` class:
 |---|---|---|
 | `GET`  | `/api/settings/{route}` | Current values, with an `ETag` for the revision |
 | `POST` | `/api/settings/{route}` | Validate + persist; honours `If-Match`, `412` on a lost race |
+| `GET`  | `/api/settings` | The registered groups — see [Discovery](discovery-endpoints.md) |
+| `GET`  | `/api/settings/{route}/schema` | One group's properties, types, defaults and constraints |
 
-Both carry the OpenAPI tag `Settings`, so they group themselves in Swagger or Scalar without
-being wrapped in a `MapGroup("")` purely to hang a tag on.
+All of them carry the OpenAPI tag `Settings`, so they group themselves in Swagger or Scalar
+without being wrapped in a `MapGroup("")` purely to hang a tag on.
+
+The last two are the discovery pair, and neither returns a stored value. They are on by default;
+`MapSettingsEndpoints(requireIfMatch: false, includeDiscovery: false)` leaves them out.
 
 > There is no `/audit` endpoint. Auditing is not built in — see
 > [Write notifications](write-notifications.md) for the hook that replaced it.

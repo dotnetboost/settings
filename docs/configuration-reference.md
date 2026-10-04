@@ -24,3 +24,10 @@
 | `.UseFluentValidation(assembly)` | FluentValidation | Register validators |
 | `.Build()` | Core | Validate configuration, return `IServiceCollection` |
 
+## `MapSettingsEndpoints()` parameters
+
+| Parameter | Default | Description |
+|---|---|---|
+| `requireIfMatch` | `false` | Reject a POST without `If-Match` with `428 Precondition Required` |
+| `includeDiscovery` | `true` | Also map `GET /api/settings` and `GET /api/settings/{route}/schema` |
+

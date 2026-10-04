@@ -31,7 +31,10 @@ internal sealed class TestApp : IAsyncDisposable
         Client  = app.GetTestClient();
     }
 
-    public static async Task<TestApp> StartAsync(Action<IServiceCollection>? configure = null, bool requireIfMatch = false)
+    public static async Task<TestApp> StartAsync(
+        Action<IServiceCollection>? configure = null,
+        bool requireIfMatch = false,
+        bool includeDiscovery = true)
     {
         var builder = WebApplication.CreateSlimBuilder();
         builder.WebHost.UseTestServer();
@@ -42,7 +45,7 @@ internal sealed class TestApp : IAsyncDisposable
         configure?.Invoke(builder.Services);
 
         var app = builder.Build();
-        app.MapSettingsEndpoints(requireIfMatch);
+        app.MapSettingsEndpoints(requireIfMatch, includeDiscovery);
         await app.StartAsync();
 
         return new TestApp(app);

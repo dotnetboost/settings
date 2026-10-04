@@ -8,6 +8,7 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../../src/DotNetBoost.Settings.Core/DotNetBoost.Settings.Core.csproj" />
+    <ProjectReference Include="../../src/DotNetBoost.Settings.FluentValidation/DotNetBoost.Settings.FluentValidation.csproj" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="xunit" />
     <PackageReference Include="xunit.runner.visualstudio" />
@@ -15,6 +16,7 @@
     <PackageReference Include="Microsoft.Extensions.Caching.Memory" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
     <PackageReference Include="Microsoft.Extensions.Logging" />
+    <PackageReference Include="FluentValidation" />
     <PackageReference Include="coverlet.collector" />
   </ItemGroup>
 </Project>

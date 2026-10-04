@@ -1,5 +1,8 @@
+using DotNetBoost.Settings.API;
+using DotNetBoost.Settings.Core;
 using DotNetBoost.Settings.Core.Attributes;
 using DotNetBoost.Settings.Core.Interfaces;
+using Microsoft.Extensions.Logging;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -61,7 +64,19 @@ public static class SettingsMinimalApiExtensions
     /// <c>428 Precondition Required</c> instead of writing unconditionally. Turn this on once
     /// every client round-trips the <c>ETag</c> returned by GET.
     /// </param>
-    public static void MapSettingsEndpoints(this IEndpointRouteBuilder endpoints, bool requireIfMatch)
+    /// <param name="includeDiscovery">
+    /// When true (the default), also registers <c>GET /api/settings</c> listing the registered
+    /// groups and <c>GET /api/settings/{route}/schema</c> describing one group's properties.
+    /// <para>
+    /// Neither returns a stored value. The schema endpoint is covered by its group's
+    /// <c>[Authorize]</c> like the group's other endpoints; the list is anonymous, and what it
+    /// reveals is the set of route segments and persistence keys — which the per-group
+    /// endpoints, anonymous by default and named after the class, already make guessable. Turn
+    /// it off if you would rather not publish that inventory.
+    /// </para>
+    /// </param>
+    public static void MapSettingsEndpoints(
+        this IEndpointRouteBuilder endpoints, bool requireIfMatch, bool includeDiscovery = true)
     {
         var settingTypes = AppDomain.CurrentDomain
             .GetAssemblies()
@@ -80,8 +95,108 @@ public static class SettingsMinimalApiExtensions
 
             RegisterGet(group, type);
             RegisterPost(group, type, requireIfMatch);
+
+            // Inside the same group, so it inherits the RequireAuthorization above: a group's
+            // endpoints should not disagree about who may look at it.
+            if (includeDiscovery) RegisterSchemaGet(group, type);
+        }
+
+        if (includeDiscovery) RegisterGroupList(endpoints, settingTypes);
+    }
+
+    /// <summary>
+    /// <c>GET /api/settings</c> — the registered groups. Routes and persistence keys only;
+    /// nothing here reads the store.
+    /// </summary>
+    private static void RegisterGroupList(IEndpointRouteBuilder endpoints, List<Type> settingTypes)
+    {
+        // Resolved once at startup rather than per request: the set of [SettingGroup] classes
+        // cannot change while the application runs.
+        var groups = settingTypes
+            .Select(t => new SettingGroupDescriptor(
+                Route:                 t.GetCustomAttribute<SettingGroupAttribute>()!.Route,
+                Name:                  SettingGroupAttribute.ResolveName(t),
+                RequiresAuthorization: t.GetCustomAttribute<AuthorizeAttribute>() is not null))
+            .OrderBy(g => g.Route, StringComparer.Ordinal)
+            .ToList();
+
+        endpoints.MapGet("api/settings", () => Results.Ok(groups))
+            .WithTags(EndpointTag)
+            .WithName("ListSettingGroups")
+            .WithSummary("Lists the registered settings groups. Returns no values.")
+            .Produces<IReadOnlyList<SettingGroupDescriptor>>();
+    }
+
+    /// <summary>
+    /// <c>GET /api/settings/{route}/schema</c> — what the group's properties are, so a client
+    /// can generate a form from the class instead of guessing at the shape of a response.
+    /// </summary>
+    private static void RegisterSchemaGet(RouteGroupBuilder group, Type type)
+    {
+        var route     = type.GetCustomAttribute<SettingGroupAttribute>()!.Route;
+        var groupName = SettingGroupAttribute.ResolveName(type);
+
+        // The property list is a fact about the class, so it is built once. Constraints are
+        // resolved per request, because a contributor is a registered service.
+        var properties = SettingSchema.Describe(type);
+
+        group.MapGet("/schema", (IServiceProvider sp) =>
+        {
+            var constraints = DescribeConstraints(sp, type);
+
+            var described = properties
+                .Select(p => new SettingPropertyDescriptor(
+                    Name:      JsonNamingPolicy.CamelCase.ConvertName(p.Name),
+                    Type:      p.ClrType,
+                    Nullable:  p.IsNullable,
+
+                    // Withheld for a [Sensitive] property. This endpoint is meant to be safe
+                    // to expose more widely than values are, and a compile-time default on a
+                    // secret property is a value like any other.
+                    Default:   p.IsSensitive ? null : p.DefaultValue,
+                    Sensitive: p.IsSensitive,
+                    Constraints: constraints.GetValueOrDefault(p.Name)))
+                .ToList();
+
+            return Results.Ok(new SettingGroupSchema(route, groupName, described));
+        })
+        .WithName($"Schema{type.Name}")
+        .WithSummary($"Describes the {type.Name} properties. Returns no values.")
+        .Produces<SettingGroupSchema>();
+    }
+
+    /// <summary>
+    /// Constraints for a group, from the first registered contributor that can describe it.
+    /// First match wins, as it does for <c>ISettingValidator</c>.
+    /// </summary>
+    private static IReadOnlyDictionary<string, IReadOnlyDictionary<string, object?>> DescribeConstraints(
+        IServiceProvider sp, Type type)
+    {
+        var contributor = sp.GetServices<ISettingSchemaContributor>().FirstOrDefault(c => c.CanDescribe(type));
+        if (contributor is null) return EmptyConstraints;
+
+        // A contributor is third-party code reflecting over validation rules. A schema is a
+        // convenience, so one that cannot describe itself should cost the constraints, not
+        // the endpoint.
+        try   { return contributor.Describe(type) ?? EmptyConstraints; }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            if (sp.GetService<ILoggerFactory>()?.CreateLogger(LoggerCategory) is { } logger)
+                LogContributorFailed(logger, contributor.GetType().Name, type.Name, ex);
+
+            return EmptyConstraints;
         }
     }
+
+    private static readonly IReadOnlyDictionary<string, IReadOnlyDictionary<string, object?>> EmptyConstraints
+        = new Dictionary<string, IReadOnlyDictionary<string, object?>>();
+
+    private const string LoggerCategory = "DotNetBoost.Settings.API.Schema";
+
+    private static readonly Action<ILogger, string, string, Exception?> LogContributorFailed =
+        LoggerMessage.Define<string, string>(
+            LogLevel.Warning, new EventId(1200, nameof(LogContributorFailed)),
+            "Schema contributor {Contributor} failed for settings group {Group}; reporting no constraints.");
 
     private static void RegisterGet(RouteGroupBuilder group, Type type)
     {
