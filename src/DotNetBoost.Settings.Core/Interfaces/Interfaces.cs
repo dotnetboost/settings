@@ -42,12 +42,29 @@ public interface ISettingAccessor<T> where T : new()
     Task SetAsync(T model, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Updates one property. Reads the current group, applies the value, and writes the whole
-    /// group back — so concurrent single-property writes can overwrite one another.
+    /// Updates one property, and writes only that property.
+    /// <para>
+    /// Properties you did not name are never part of the write, so a concurrent edit to a
+    /// different property of the same group cannot be reverted by this call. The write is
+    /// still conditional on the property's own stored revision, so two callers racing on the
+    /// <em>same</em> property are resolved rather than silently merged — the loser gets
+    /// <see cref="DotNetBoost.Settings.Core.SettingConcurrencyException"/>.
+    /// </para>
+    /// <para>
+    /// Registered validators still see the whole group, built from a fresh read of the store,
+    /// because a validator takes a model rather than a property.
+    /// </para>
     /// </summary>
     /// <param name="selector">Must point directly at a property of <typeparamref name="T"/>.</param>
-    /// <param name="value">The value to store.</param>
+    /// <param name="value">
+    /// The value to store. A <c>null</c> writes nothing — a property is skipped rather than
+    /// stored as null, so this cannot be used to clear one. Use
+    /// <see cref="ClearAsync"/> to remove the group's rows.
+    /// </param>
     /// <param name="cancellationToken">Cancels the read and the write.</param>
+    /// <exception cref="DotNetBoost.Settings.Core.SettingValidationException">
+    /// A registered validator rejected the group with the new value applied; nothing is written.
+    /// </exception>
     Task SetAsync<TProp>(Expression<Func<T, TProp>> selector,
                          TProp value,
                          CancellationToken cancellationToken = default);

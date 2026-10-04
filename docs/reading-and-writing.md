@@ -25,7 +25,7 @@ public class EmailService(ISettingManager settings)
 | `GetAsync(refreshCache, ct)` | Returns the full settings object |
 | `GetAsync(selector, refreshCache, ct)` | Returns one property |
 | `SetAsync(model, ct)` | Persists the full object — validates, encrypts, notifies |
-| `SetAsync(selector, value, ct)` | Updates a single property |
+| `SetAsync(selector, value, ct)` | Updates a single property — and writes only that property |
 | `ExistsAsync(allProperties, ct)` | Checks row existence |
 | `ClearAsync(ct)` | Deletes all settings for the group |
 | `GetVersionAsync(ct)` | Current revision, for conditional writes |
@@ -40,6 +40,26 @@ public class EmailService(ISettingManager settings)
 > database I/O, and under load that starves the pool for the whole application — not just for
 > settings. Where a value is needed inside a synchronous lambda, read it once with `await`
 > beforehand and capture it; that is both correct and cheaper than resolving it per element.
+
+## Updating one property
+
+`SetAsync(x => x.Port, 587)` writes one row. Properties you did not name are not part of the
+write at all, so a concurrent edit to a different property of the same group cannot be undone
+by it.
+
+This was not always true. The call used to rebuild the whole model **from the cache** and put it
+through the group write, which compares every property against fresh store rows and writes
+whatever differs — so a property another instance had changed while this one's cache was warm
+read back stale, counted as a difference, and was written back. A call that meant to touch one
+property reverted someone else's edit to another, over a window as wide as `CacheDuration`
+rather than a round trip.
+
+Registered validators still see the whole group, built from a fresh read, because a validator
+takes a model rather than a property. A `null` value writes nothing: properties are skipped
+rather than stored as null, so this overload cannot clear one — use `ClearAsync` for that.
+
+Two callers racing on the *same* property are still resolved rather than merged: the write is
+conditional on that property's stored revision, and the loser gets `SettingConcurrencyException`.
 
 ## Concurrent writes
 
