@@ -13,6 +13,18 @@ public sealed class SettingOptions
     public TimeSpan CacheDuration { get; set; } = TimeSpan.FromMinutes(10);
 
     /// <summary>
+    /// How often, at most, a cache hit re-checks the <c>ISettingChangeSignal</c> to see
+    /// whether another instance has written the group. Default: 5 seconds.
+    /// Set via <c>UseChangeSignal()</c> or <c>SynchronizeThroughDistributedCache()</c>.
+    /// <para>
+    /// This is the staleness bound a change signal leaves: an instance can serve values
+    /// another instance replaced for up to this long. Without a signal registered the check
+    /// costs nothing and never fires, and <see cref="CacheDuration"/> is the bound instead.
+    /// </para>
+    /// </summary>
+    public TimeSpan ChangeCheckInterval { get; set; } = TimeSpan.FromSeconds(5);
+
+    /// <summary>
     /// Whether a <c>[Sensitive]</c> value that cannot be decrypted aborts the read with a
     /// <see cref="SettingDecryptionException"/>. Default: <c>true</c>.
     /// <para>

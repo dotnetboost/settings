@@ -1,6 +1,7 @@
 using DotNetBoost.Settings.Core;
 using DotNetBoost.Settings.Core.Interfaces;
 using DotNetBoost.Settings.Core.Services;
+using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace Microsoft.Extensions.DependencyInjection
@@ -21,6 +22,10 @@ namespace Microsoft.Extensions.DependencyInjection
             // application registers one — null means "not captured", never a claim about who
             // acted. ASP.NET applications want .UseHttpContextActor() from the API package.
             services.TryAddScoped<ISettingActorAccessor, NullSettingActorAccessor>();
+
+            // Signals nothing until an application opts in, so a single-instance deployment
+            // needs no configuration and behaves exactly as it did before signalling existed.
+            services.TryAddSingleton<ISettingChangeSignal, NullSettingChangeSignal>();
 
             return new SettingBuilder(services);
         }
@@ -159,6 +164,94 @@ namespace Microsoft.Extensions.DependencyInjection
             ArgumentNullException.ThrowIfNull(builder);
             builder.Services.AddScoped<ISettingProjector<TSettings>, TProjector>();
             return builder;
+        }
+    }
+
+    /// <summary>Builder methods for propagating writes between application instances.</summary>
+    public static class ChangeSignalBuilderExtensions
+    {
+        /// <summary>
+        /// Uses <typeparamref name="TSignal"/> to tell every instance that a group changed,
+        /// re-checked at most every <paramref name="checkInterval"/> (default: 5 seconds).
+        /// Registered as a singleton. See <see cref="ISettingChangeSignal"/>.
+        /// </summary>
+        public static SettingBuilder UseChangeSignal<TSignal>(
+            this SettingBuilder builder, TimeSpan? checkInterval = null)
+            where TSignal : class, ISettingChangeSignal
+        {
+            ArgumentNullException.ThrowIfNull(builder);
+            SetCheckInterval(builder, checkInterval);
+            builder.Services.Replace(ServiceDescriptor.Singleton<ISettingChangeSignal, TSignal>());
+            return builder.PublishChangeSignals();
+        }
+
+        /// <summary>
+        /// Uses the signal <paramref name="factory"/> creates.
+        /// See <see cref="UseChangeSignal{TSignal}"/>.
+        /// </summary>
+        public static SettingBuilder UseChangeSignal(
+            this SettingBuilder builder,
+            Func<IServiceProvider, ISettingChangeSignal> factory,
+            TimeSpan? checkInterval = null)
+        {
+            ArgumentNullException.ThrowIfNull(builder);
+            ArgumentNullException.ThrowIfNull(factory);
+            SetCheckInterval(builder, checkInterval);
+            builder.Services.Replace(ServiceDescriptor.Singleton(factory));
+            return builder.PublishChangeSignals();
+        }
+
+        /// <summary>
+        /// Propagates writes between instances through the application's
+        /// <c>IDistributedCache</c> — Redis, SQL Server, or whatever is already shared.
+        /// <para>
+        /// After this, an instance notices another's write within
+        /// <paramref name="checkInterval"/> (default: 5 seconds) rather than waiting out its
+        /// own <c>CacheDuration</c>.
+        /// </para>
+        /// </summary>
+        /// <param name="builder">The settings builder.</param>
+        /// <param name="keyPrefix">
+        /// Prefixes the entry holding each group's token. Make it distinct per application if
+        /// several share a cache.
+        /// </param>
+        /// <param name="checkInterval">How often, at most, a cache hit re-checks the token.</param>
+        public static SettingBuilder SynchronizeThroughDistributedCache(
+            this SettingBuilder builder,
+            string keyPrefix = DistributedCacheSettingChangeSignal.DefaultKeyPrefix,
+            TimeSpan? checkInterval = null)
+        {
+            ArgumentNullException.ThrowIfNull(builder);
+            ArgumentException.ThrowIfNullOrWhiteSpace(keyPrefix);
+
+            return builder.UseChangeSignal(
+                sp => new DistributedCacheSettingChangeSignal(
+                    sp.GetService<IDistributedCache>() ?? throw new InvalidOperationException(
+                        "SynchronizeThroughDistributedCache() needs an IDistributedCache that every " +
+                        "instance shares. Register one, e.g. services.AddStackExchangeRedisCache(...)."),
+                    keyPrefix),
+                checkInterval);
+        }
+
+        /// <summary>
+        /// Publishes a signal on every write, as an <see cref="ISettingWriteObserver"/> — one
+        /// notification path rather than two, which is also how <c>ClearAsync</c> comes to
+        /// signal without a second call site. Idempotent; the <c>UseChangeSignal</c> overloads
+        /// call it for you.
+        /// </summary>
+        private static SettingBuilder PublishChangeSignals(this SettingBuilder builder)
+        {
+            builder.Services.TryAddEnumerable(
+                ServiceDescriptor.Scoped<ISettingWriteObserver, ChangeSignalPublisher>());
+            return builder;
+        }
+
+        private static void SetCheckInterval(SettingBuilder builder, TimeSpan? checkInterval)
+        {
+            if (checkInterval is not { } interval) return;
+
+            ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(interval, TimeSpan.Zero, nameof(checkInterval));
+            builder.Options.ChangeCheckInterval = interval;
         }
     }
 
