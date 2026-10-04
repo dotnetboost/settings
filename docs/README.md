@@ -14,6 +14,7 @@ New here? Start with the [5-minute quick start](../README.md#get-started-in-5-mi
 - [Write notifications](write-notifications.md): observe every write — what changed, by whom
 - [Caching](caching.md): cache duration, Redis for multi-server deployments
 - [REST API endpoints](rest-api.md): generated endpoints and **how to secure them**
+- [Discovery endpoints](discovery-endpoints.md): list the groups, describe one's properties and constraints
 
 **Tooling**
 - [Dashboard (SPA client)](dashboard.md): a web UI for editing settings

@@ -196,6 +196,7 @@ builder.Services.AddSettings()
 | Run code when a setting changes | [Change notifications](https://github.com/dotnetboost/settings/blob/main/docs/change-notifications.md) |
 | Stop two people overwriting each other's edits | [Reading & writing](https://github.com/dotnetboost/settings/blob/main/docs/reading-and-writing.md#concurrent-writes) |
 | Record or forward every write (and who made it) | [Write notifications](https://github.com/dotnetboost/settings/blob/main/docs/write-notifications.md) |
+| Generate a form from the class (list groups, read the schema) | [Discovery endpoints](https://github.com/dotnetboost/settings/blob/main/docs/discovery-endpoints.md) |
 | Give admins a web UI to edit settings | [Dashboard](https://github.com/dotnetboost/settings/blob/main/docs/dashboard.md) |
 | See every builder option | [Configuration reference](https://github.com/dotnetboost/settings/blob/main/docs/configuration-reference.md) |
 | Run the full demo stack (API, dashboard, PostgreSQL, Redis) | [.NET Aspire](https://github.com/dotnetboost/settings/blob/main/docs/aspire.md) |

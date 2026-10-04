@@ -574,9 +574,9 @@ public sealed partial class SettingManager : ISettingManager
     private static TypeMap GetTypeMap(Type type)
         => TypeMaps.GetOrAdd(type, t =>
         {
-            var props = t
-                .GetProperties(BindingFlags.Public | BindingFlags.Instance)
-                .Where(p => p.CanRead && p.CanWrite)
+            // Same rule as SettingSchema.Describe, from the same place: a schema that listed a
+            // property the engine ignores would be worse than no schema at all.
+            var props = SettingSchema.StorableProperties(t)
                 .Select(BuildPropertyMap)
                 .ToList();
 
