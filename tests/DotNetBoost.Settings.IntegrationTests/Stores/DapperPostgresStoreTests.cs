@@ -37,7 +37,7 @@ public sealed class DapperPostgresStoreTests(PostgreSqlFixture fixture)
     }
 
     [Fact]
-    public async Task SchemaInitializer_CreatesBothTables_AndIsIdempotent()
+    public async Task SchemaInitializer_CreatesTheSettingsTable_AndIsIdempotent()
     {
         var connection = await NewConnectionAsync();
 
@@ -48,7 +48,10 @@ public sealed class DapperPostgresStoreTests(PostgreSqlFixture fixture)
             "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'");
 
         Assert.Contains("settings", tables, StringComparer.OrdinalIgnoreCase);
-        Assert.Contains("settingaudits", tables, StringComparer.OrdinalIgnoreCase);
+
+        // The bootstrap used to create a SettingAudits table that nothing ever wrote to, so a
+        // Dapper user concluded auditing worked and got silence. It must stay gone.
+        Assert.DoesNotContain("settingaudits", tables, StringComparer.OrdinalIgnoreCase);
     }
 
     [Fact]
