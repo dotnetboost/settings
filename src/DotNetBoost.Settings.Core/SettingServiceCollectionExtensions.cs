@@ -17,6 +17,11 @@ namespace Microsoft.Extensions.DependencyInjection
             services.TryAddSingleton<ISettingCache, SettingCache>();
             services.TryAddScoped<ISettingManager, SettingManager>();
 
+            // Always resolvable, so nothing has to null-check it. Reports no actor until an
+            // application registers one — null means "not captured", never a claim about who
+            // acted. ASP.NET applications want .UseHttpContextActor() from the API package.
+            services.TryAddScoped<ISettingActorAccessor, NullSettingActorAccessor>();
+
             return new SettingBuilder(services);
         }
     }
@@ -92,15 +97,44 @@ namespace Microsoft.Extensions.DependencyInjection
         }
     }
 
-    /// <summary>Builder methods for the change-history trail.</summary>
-    public static class AuditBuilderExtensions
+    /// <summary>Builder methods for the write-notification hook.</summary>
+    public static class WriteObserverBuilderExtensions
     {
-        /// <summary>Plugs in a custom audit store to record full change history.</summary>
-        public static SettingBuilder UseAuditStore<TAuditStore>(this SettingBuilder builder)
-            where TAuditStore : class, ISettingAuditStore
+        /// <summary>
+        /// Registers an observer called once after every completed write to any settings
+        /// group, with the per-property diff, the actor and a correlation id.
+        /// <para>
+        /// Several may be registered; all run, in registration order. An observer's
+        /// exception is logged and swallowed — see <see cref="ISettingWriteObserver"/>.
+        /// </para>
+        /// </summary>
+        public static SettingBuilder UseWriteObserver<TObserver>(this SettingBuilder builder)
+            where TObserver : class, ISettingWriteObserver
         {
             ArgumentNullException.ThrowIfNull(builder);
-            builder.Services.AddScoped<ISettingAuditStore, TAuditStore>();
+
+            // Add, not TryAdd: observers compose. A second registration is a second observer,
+            // not a replacement for the first.
+            builder.Services.AddScoped<ISettingWriteObserver, TObserver>();
+            return builder;
+        }
+
+        /// <summary>
+        /// Registers <see cref="LoggingSettingWriteObserver"/>, which logs one line per write
+        /// naming the changed properties — never their values. Off unless you ask for it.
+        /// </summary>
+        public static SettingBuilder UseLoggingWriteObserver(this SettingBuilder builder)
+            => builder.UseWriteObserver<LoggingSettingWriteObserver>();
+
+        /// <summary>
+        /// Replaces the default actor accessor, which reports no actor, so
+        /// <see cref="SettingWrite.Actor"/> carries who made the change.
+        /// </summary>
+        public static SettingBuilder UseActorAccessor<TAccessor>(this SettingBuilder builder)
+            where TAccessor : class, ISettingActorAccessor
+        {
+            ArgumentNullException.ThrowIfNull(builder);
+            builder.Services.Replace(ServiceDescriptor.Scoped<ISettingActorAccessor, TAccessor>());
             return builder;
         }
     }

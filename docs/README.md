@@ -11,7 +11,7 @@ New here? Start with the [5-minute quick start](../README.md#get-started-in-5-mi
 - [Encrypting sensitive values](encryption.md): `[Sensitive]`, AES-256-GCM, key rotation
 - [Validation](validation.md): Data Annotations and FluentValidation
 - [Change notifications](change-notifications.md): run code when a setting changes
-- [Audit trail](audit-trail.md): who changed what, and when
+- [Write notifications](write-notifications.md): observe every write — what changed, by whom
 - [Caching](caching.md): cache duration, Redis for multi-server deployments
 - [REST API endpoints](rest-api.md): generated endpoints and **how to secure them**
 

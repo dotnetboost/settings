@@ -47,7 +47,6 @@ Adding `Name` to a class that **already has rows** requires renaming those rows,
 
 ```sql
 UPDATE Settings     SET SettingGroup = 'new-name' WHERE SettingGroup = 'OldClassName';
-UPDATE SettingAudits SET SettingGroup = 'new-name' WHERE SettingGroup = 'OldClassName';
 ```
 
 ```js

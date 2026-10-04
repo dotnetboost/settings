@@ -180,8 +180,8 @@ builder.Services.AddSettings()
     .UseEntityFrameworkCore<AppDbContext>()
     .UseAesEncryption(key)                          // encrypt [Sensitive] properties
     .UseFluentValidation(typeof(Program).Assembly)  // reject invalid values
-    .UseAuditStore<EfCoreAuditStore>()              // keep a change history (EF Core)
     .OnChanged<MailSettings, MailSettingsChanged>() // react when a value changes
+    .UseWriteObserver<MyWriteObserver>()            // record or forward every write
     .Build();
 ```
 
@@ -195,7 +195,7 @@ builder.Services.AddSettings()
 | Run on several servers (Redis cache) | [Caching](https://github.com/dotnetboost/settings/blob/main/docs/caching.md) |
 | Run code when a setting changes | [Change notifications](https://github.com/dotnetboost/settings/blob/main/docs/change-notifications.md) |
 | Stop two people overwriting each other's edits | [Reading & writing](https://github.com/dotnetboost/settings/blob/main/docs/reading-and-writing.md#concurrent-writes) |
-| See who changed what, and when | [Audit trail](https://github.com/dotnetboost/settings/blob/main/docs/audit-trail.md) |
+| Record or forward every write (and who made it) | [Write notifications](https://github.com/dotnetboost/settings/blob/main/docs/write-notifications.md) |
 | Give admins a web UI to edit settings | [Dashboard](https://github.com/dotnetboost/settings/blob/main/docs/dashboard.md) |
 | See every builder option | [Configuration reference](https://github.com/dotnetboost/settings/blob/main/docs/configuration-reference.md) |
 | Run the full demo stack (API, dashboard, PostgreSQL, Redis) | [.NET Aspire](https://github.com/dotnetboost/settings/blob/main/docs/aspire.md) |
@@ -220,7 +220,7 @@ See [Running everything with .NET Aspire](https://github.com/dotnetboost/setting
 
 | Package | What it's for |
 |---|---|
-| `DotNetBoost.Settings.Core` | Required. The engine: `ISettingManager`, caching, encryption, audit, notifications |
+| `DotNetBoost.Settings.Core` | Required. The engine: `ISettingManager`, caching, encryption, notifications |
 | `DotNetBoost.Settings.EntityFrameworkCore` | Store settings through EF Core (SQL Server, PostgreSQL, SQLite) |
 | `DotNetBoost.Settings.Dapper` | Store settings through Dapper (SQL Server, PostgreSQL, SQLite) |
 | `DotNetBoost.Settings.MongoDb` | Store settings in MongoDB |

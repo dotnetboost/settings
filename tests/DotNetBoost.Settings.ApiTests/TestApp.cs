@@ -1,4 +1,5 @@
 using DotNetBoost.Settings.Core;
+using DotNetBoost.Settings.Core.Attributes;
 using DotNetBoost.Settings.Core.Interfaces;
 using DotNetBoost.Settings.Core.Models;
 using Microsoft.AspNetCore.Builder;
@@ -114,24 +115,13 @@ internal sealed class TestApp : IAsyncDisposable
     }
 }
 
-/// <summary>Records what it is asked for so tests can assert the group key used.</summary>
-internal sealed class RecordingAuditStore : ISettingAuditStore
+/// <summary>
+/// The group the endpoint tests exercise. Its Name differs from the class name on purpose,
+/// so anything keyed on the persistence key cannot pass by using the class name instead.
+/// <see cref="TestApp.StubStore"/> seeds it.
+/// </summary>
+[SettingGroup("api-test", Name = "api-test-group")]
+public class ApiTestSettings
 {
-    public List<(string Group, string? Key)> Queries { get; } = [];
-
-    public Task RecordAsync(SettingAuditEntry entry, CancellationToken ct = default) => Task.CompletedTask;
-
-    public Task<IReadOnlyList<SettingAuditEntry>> GetHistoryAsync(
-        string group, string? key = null, CancellationToken ct = default)
-    {
-        Queries.Add((group, key));
-        return Task.FromResult<IReadOnlyList<SettingAuditEntry>>(
-        [
-            new SettingAuditEntry
-            {
-                Group = group, Key = key ?? "Host",
-                OldValue = "before", NewValue = "after", ChangedBy = "tester"
-            }
-        ]);
-    }
+    public string Host { get; set; } = string.Empty;
 }

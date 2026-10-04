@@ -66,19 +66,6 @@ internal static class DapperSchemaInitializer
             );
             CREATE UNIQUE INDEX UX_Settings_Group_Key ON Settings(SettingGroup, SettingKey);
         END;
-        IF OBJECT_ID('SettingAudits','U') IS NULL
-        BEGIN
-            CREATE TABLE SettingAudits (
-                Id           UNIQUEIDENTIFIER PRIMARY KEY,
-                SettingGroup NVARCHAR(191)    NOT NULL,
-                SettingKey   NVARCHAR(191)    NOT NULL,
-                OldValue     NVARCHAR(MAX)    NOT NULL,
-                NewValue     NVARCHAR(MAX)    NOT NULL,
-                ChangedBy    NVARCHAR(256)    NOT NULL,
-                ChangedAt    DATETIME2        NOT NULL
-            );
-            CREATE INDEX IX_SettingAudits_Group_Key ON SettingAudits(SettingGroup, SettingKey);
-        END;
         """;
 
     private const string PostgreSqlScript = """
@@ -94,15 +81,6 @@ internal static class DapperSchemaInitializer
             RowVersion   bytea
         );
         CREATE UNIQUE INDEX IF NOT EXISTS UX_Settings_Group_Key ON Settings(SettingGroup,SettingKey);
-        CREATE TABLE IF NOT EXISTS SettingAudits (
-            Id           uuid          PRIMARY KEY,
-            SettingGroup varchar(191)  NOT NULL,
-            SettingKey   varchar(191)  NOT NULL,
-            OldValue     text          NOT NULL,
-            NewValue     text          NOT NULL,
-            ChangedBy    varchar(256)  NOT NULL,
-            ChangedAt    timestamp     NOT NULL
-        );
         """;
 
     private const string SqliteScript = """
@@ -118,15 +96,6 @@ internal static class DapperSchemaInitializer
             RowVersion   BLOB
         );
         CREATE UNIQUE INDEX IF NOT EXISTS UX_Settings_Group_Key ON Settings(SettingGroup, SettingKey);
-        CREATE TABLE IF NOT EXISTS SettingAudits (
-            Id           TEXT NOT NULL PRIMARY KEY,
-            SettingGroup TEXT NOT NULL,
-            SettingKey   TEXT NOT NULL,
-            OldValue     TEXT NOT NULL,
-            NewValue     TEXT NOT NULL,
-            ChangedBy    TEXT NOT NULL,
-            ChangedAt    TEXT NOT NULL
-        );
         """;
 }
 

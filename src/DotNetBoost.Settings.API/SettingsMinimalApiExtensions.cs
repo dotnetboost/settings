@@ -48,7 +48,6 @@ public static class SettingsMinimalApiExtensions
 
     /// <summary>
     /// Registers GET and POST endpoints for every <c>[SettingGroup]</c>-decorated class.
-    /// Optionally registers GET /audit for classes that have an audit store registered.
     /// </summary>
     public static void MapSettingsEndpoints(this IEndpointRouteBuilder endpoints)
         => endpoints.MapSettingsEndpoints(requireIfMatch: false);
@@ -81,7 +80,6 @@ public static class SettingsMinimalApiExtensions
 
             RegisterGet(group, type);
             RegisterPost(group, type, requireIfMatch);
-            RegisterAuditGet(group, type);
         }
     }
 
@@ -169,30 +167,6 @@ public static class SettingsMinimalApiExtensions
         .Accepts(type, "application/json")
         .Produces(204)
         .ProducesValidationProblem();
-    }
-
-    private static void RegisterAuditGet(RouteGroupBuilder group, Type type)
-    {
-        // The audit trail is keyed by the group's persistence name, which is not necessarily
-        // the class name. Resolved once here rather than per request.
-        var groupName = SettingGroupAttribute.ResolveName(type);
-
-        group.MapGet("/audit", async (IServiceProvider sp, string? key, CancellationToken ct) =>
-        {
-            // Resolved from the request scope rather than bound as a handler parameter.
-            // ISettingAuditStore is optional, and minimal APIs infer an unregistered complex
-            // parameter as a *body* parameter — which throws while building the endpoint,
-            // taking the whole application down at startup rather than at request time.
-            var auditStore = sp.GetService<ISettingAuditStore>();
-
-            if (auditStore is null)
-                return Results.NotFound("Audit store is not configured.");
-
-            var history = await auditStore.GetHistoryAsync(groupName, key, ct).ConfigureAwait(false);
-            return Results.Ok(history);
-        })
-        .WithName($"Audit{type.Name}")
-        .WithSummary($"Returns the change history for {type.Name} settings.");
     }
 
     private static object GetAccessor(ISettingManager manager, Type type)

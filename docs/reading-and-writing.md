@@ -24,7 +24,7 @@ public class EmailService(ISettingManager settings)
 |---|---|
 | `GetAsync(refreshCache, ct)` | Returns the full settings object |
 | `GetAsync(selector, refreshCache, ct)` | Returns one property |
-| `SetAsync(model, ct)` | Persists the full object — validates, encrypts, audits, notifies |
+| `SetAsync(model, ct)` | Persists the full object — validates, encrypts, notifies |
 | `SetAsync(selector, value, ct)` | Updates a single property |
 | `ExistsAsync(allProperties, ct)` | Checks row existence |
 | `ClearAsync(ct)` | Deletes all settings for the group |

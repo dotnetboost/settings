@@ -25,7 +25,7 @@ public class EndpointMetadataTests
     }
 
     [Fact]
-    public async Task EveryGeneratedEndpoint_IsTagged_IncludingAudit()
+    public async Task EveryGeneratedEndpoint_IsTagged()
     {
         await using var app = await TestApp.StartAsync();
 
@@ -35,7 +35,26 @@ public class EndpointMetadataTests
             .ToList();
 
         Assert.Empty(untagged);
-        Assert.Contains(SettingsEndpoints(app), e => e.RoutePattern.RawText!.EndsWith("/audit", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// Two endpoints per group, GET and POST. Pinned so that adding a third — or leaving the
+    /// removed /audit route behind — is a test failure rather than something to notice later.
+    /// </summary>
+    [Fact]
+    public async Task EachGroup_GetsExactlyGetAndPost()
+    {
+        await using var app = await TestApp.StartAsync();
+
+        var methods = SettingsEndpoints(app)
+            .Where(e => e.RoutePattern.RawText == "api/settings/api-test/")
+            .SelectMany(e => e.Metadata.GetMetadata<IHttpMethodMetadata>()!.HttpMethods)
+            .OrderBy(m => m, StringComparer.Ordinal)
+            .ToList();
+
+        Assert.Equal(["GET", "POST"], methods);
+        Assert.DoesNotContain(SettingsEndpoints(app),
+            e => e.RoutePattern.RawText!.EndsWith("/audit", StringComparison.Ordinal));
     }
 
     private static List<RouteEndpoint> SettingsEndpoints(TestApp app)

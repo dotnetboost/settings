@@ -5,7 +5,53 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Removed
+- **The built-in audit trail, as BREAKING in prerelease.** Gone: `ISettingAuditStore`,
+  `SettingAuditEntry`, `EfCoreAuditStore`, `.UseAuditStore<T>()`,
+  `GET /api/settings/{route}/audit`, and the `SettingAudits` table in both the EF Core model and
+  the Dapper schema bootstrap.
+  It could not be frozen into 1.0. `ChangedBy` was the literal string `"system"` on every entry
+  and never anything else, though the column was required in all four schemas — it carried no
+  information. `ClearAsync` deleted every row in a group and recorded nothing, so the most
+  destructive operation in the library was the only one with no trail. Entries were written one
+  round trip at a time *after* the write had already committed, each with its own
+  `SaveChangesAsync`, outside the write's transaction — and the loop had no `try`/`catch`, so an
+  audit store failure threw on a write that had succeeded, thirty lines away from change handlers
+  whose exceptions are deliberately swallowed. `GetHistoryAsync` was unbounded and the endpoint
+  offered no paging, over a table that only grows. And it existed only for EF Core: the Dapper
+  bootstrap created a `SettingAudits` table that nothing ever wrote to, so a Dapper user got a
+  table, concluded auditing worked, and got silence.
+  Auditing returns as a general `DotNetBoost.Auditing` package over the new write hook — port in
+  Core, implementation in a satellite package, the way `ISettingValidator` and
+  `DotNetBoost.Settings.FluentValidation` already work.
+  **Migration:** implement `ISettingWriteObserver`, or call `.UseLoggingWriteObserver()` in the
+  meantime. Nothing drops an existing `SettingAudits` table for you; your rows stay where they
+  are.
+
 ### Added
+- **`ISettingWriteObserver`** — called once after every completed write to any settings group,
+  with `SettingWrite`: the group name and route, the kind of write, one `SettingChange` per
+  property that actually changed, the actor, a correlation id and a timestamp. Register with
+  `.UseWriteObserver<TObserver>()`; several may be registered and all run. This is the hook an
+  auditing package, a webhook publisher or a search indexer implements.
+  One notification per write rather than one per property, so the several changes of a single
+  save share a correlation id and are identifiable as one edit. **`ClearAsync` now reports too**,
+  as `SettingWriteKind.Cleared`. An observer's exception is logged and swallowed, the same policy
+  as `ISettingChangedHandler<T>` — a write that has already committed must not fail because a
+  downstream observer did — and each observer is wrapped on its own so one failure does not skip
+  the rest.
+  A `[Sensitive]` property arrives with `IsRedacted` set and both values `null`. The library
+  decides what is sensitive and an observer only learns that it changed; redaction follows the
+  attribute rather than whether the value happened to be encrypted at rest, so it holds with no
+  encryptor configured.
+- **`ISettingActorAccessor`**, and `.UseHttpContextActor()` in the API package, which reads
+  `ClaimTypes.NameIdentifier` then `Identity.Name` off the current request. `Actor` is nullable
+  and `null` means *not captured* — never a placeholder, which is what made the old `ChangedBy`
+  worthless.
+- **`LoggingSettingWriteObserver`**, opt in with `.UseLoggingWriteObserver()`: one log line per
+  write naming the group, actor, correlation id and the **names** of the changed properties.
+  Never a value, redacted or not — a settings value is exactly the kind of thing that should not
+  reach a log aggregator because a default turned it on.
 - **`ISettingProjector<T>`** — a read-path hook for serving a group as something other than its
   stored values: a display name in the request's language, an image id resolved to a URL, a
   field masked for display. Register with `.UseProjector<TSettings, TProjector>()`; the
@@ -27,6 +73,12 @@ This project follows [Semantic Versioning](https://semver.org/).
   type, which would surface much later as truncated settings.
 
 ### Changed
+- **Nothing is registered against `DbContext` any more.** `UseEntityFrameworkCore<TContext>` had
+  been registering `TContext` as the scoped `DbContext` so `EfCoreAuditStore` could resolve; with
+  the audit store gone nothing needs it, and the settings store is constructed from `TContext`
+  explicitly. A library should not claim a framework type it does not own — in an application
+  with two contexts it silently handed a bare `DbContext` dependency whichever one Settings was
+  pointed at.
 - **The EF Core store takes a plain `DbContext`.** `EfCoreSettingStore` and `EfCoreAuditStore`
   reach their entities through `Set<Setting>()` / `Set<SettingAuditEntry>()`, and
   `UseEntityFrameworkCore<TContext>` no longer constrains `TContext` beyond `DbContext`. A

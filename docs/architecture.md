@@ -9,13 +9,15 @@
                       SettingManager
         ┌───────────┬────────┼────────┬─────────────┐
         │           │        │        │             │
-  ISettingCache  ISettingStore  ISettingEncryptor  ISettingAuditStore
-  (IMemoryCache   (EF Core /      (AES-256-GCM       (EfCoreAuditStore
-   or Redis)       Dapper /        or custom)          or custom)
+  ISettingCache  ISettingStore  ISettingEncryptor  ISettingValidator
+  (IMemoryCache   (EF Core /      (AES-256-GCM       (DataAnnotations
+   or Redis)       Dapper /        or custom)          or FluentValidation)
                    MongoDB)
                              │
-                   ISettingChangedHandler<T>
-                   (your app's runtime reactions)
+                 ┌───────────┴────────────┐
+      ISettingChangedHandler<T>    ISettingWriteObserver
+      (typed, one group,           (untyped, every group: the
+       in-process reactions)        property diff, actor, correlation id)
 ```
 
 ## Repository layout
