@@ -149,39 +149,10 @@ public sealed partial class SettingManager : ISettingManager
 
         foreach (var prop in map.Properties)
         {
-            var raw = prop.Getter(model!);
-            if (raw is null) continue;
-
-            var plaintext = Extensions.ConvertFrom(prop.PropertyType, raw);
-            var strValue  = plaintext;
-
-            var isEncrypted = false;
-            if (prop.IsSensitive && _encryptor is not null)
-            {
-                strValue    = _encryptor.Encrypt(strValue);
-                isEncrypted = true;
-            }
-
-            prevMap.TryGetValue(prop.Name, out var prev);
-
             // Writing only what changed is what keeps concurrent edits to *different*
             // properties of the same group from overwriting one another.
-            if (IsUnchanged(prev, isEncrypted, plaintext, map.GroupName, prop.Name)) continue;
-
-            rows.Add(new Setting
-            {
-                Id          = prev?.Id ?? Guid.NewGuid(),
-                Group       = map.GroupName,
-                Key         = prop.Name,
-                Type        = prop.TypeName,
-                Value       = strValue,
-                IsEncrypted = isEncrypted,
-                UpdatedAt   = DateTime.UtcNow,
-
-                // The token this write is conditional on. Null for a property that has never
-                // been stored, which is a plain insert.
-                RowVersion  = prev?.RowVersion
-            });
+            if (BuildRowIfChanged(map, prop, prop.Getter(model!), prevMap) is { } row)
+                rows.Add(row);
         }
 
         if (rows.Count == 0)
@@ -204,12 +175,110 @@ public sealed partial class SettingManager : ISettingManager
         LogGroupUpdated(_logger, map.GroupName, rows.Count);
     }
 
+    /// <summary>
+    /// Writes one property, and only that property.
+    /// <para>
+    /// It used to rebuild the whole model from the <em>cache</em> and put it through the group
+    /// write, which compares every property against fresh store rows and writes whatever
+    /// differs. So a property another writer had changed while this instance's cache was warm
+    /// read back stale, counted as a difference, and was written back — reverting their edit,
+    /// from a call that only ever meant to touch one property, over a window as wide as
+    /// <c>CacheDuration</c> rather than a round trip.
+    /// </para>
+    /// <para>
+    /// Now a single row is built and written. Properties the caller did not name are never
+    /// part of the write, so there is nothing to revert. Validators still see the whole group
+    /// — they take a model, not a property — built from a fresh read so the rest of it is what
+    /// is actually stored.
+    /// </para>
+    /// </summary>
     internal async Task SetAsync<T, TProp>(
         Expression<Func<T, TProp>> selector, TProp value, CancellationToken ct) where T : new()
     {
-        var model = await GetAsync<T>(false, ct).ConfigureAwait(false);
-        GetPropertyInfo(selector).SetValue(model, value);
-        await SetAsync(model, null, ct).ConfigureAwait(false);
+        var map  = GetTypeMap(typeof(T));
+        var info = GetPropertyInfo(selector);
+
+        var prop = map.Properties.FirstOrDefault(p => string.Equals(p.Name, info.Name, StringComparison.Ordinal))
+            ?? throw new InvalidOperationException(
+                $"'{info.Name}' is not a readable and writable property of {typeof(T).Name}.");
+
+        // Straight from the store, never the cache. A stale read is the whole bug, and the
+        // concurrency token has to be the current one or the conditional write fails.
+        var prevRows = await _store.GetGroupAsync(map.GroupName, ct).ConfigureAwait(false);
+        var prevMap  = prevRows.ToDictionary(r => r.Key, StringComparer.OrdinalIgnoreCase);
+
+        T previous, candidate;
+        try   { previous  = MapToModel<T>(prevRows); }
+        catch { previous  = new T(); }
+        try   { candidate = MapToModel<T>(prevRows); }
+        catch { candidate = new T(); }
+
+        prop.Setter(candidate!, value);
+
+        await ValidateOrThrowAsync(candidate, ct).ConfigureAwait(false);
+
+        var row = BuildRowIfChanged(map, prop, prop.Getter(candidate!), prevMap);
+        if (row is null)
+        {
+            LogGroupUnchanged(_logger, map.GroupName);
+            return;
+        }
+
+        await _store.UpsertManyAsync([row], ct).ConfigureAwait(false);
+
+        _cache.Remove(CacheKey<T>());
+
+        await NotifyWrittenAsync(
+            map, SettingWriteKind.Updated, BuildChanges(map, [row], prevMap), ct).ConfigureAwait(false);
+
+        await FireChangedHandlersAsync(previous, candidate, map.GroupName, ct).ConfigureAwait(false);
+
+        LogGroupUpdated(_logger, map.GroupName, 1);
+    }
+
+    /// <summary>
+    /// Builds the row for one property, or <c>null</c> when nothing needs writing. Shared by
+    /// the group write and the single-property write so the encryption and change-detection
+    /// rules cannot drift apart between them.
+    /// </summary>
+    /// <returns>
+    /// <c>null</c> when the value is unchanged, and also when it is <c>null</c> — a null
+    /// property is skipped rather than stored, so a property cannot be cleared by assigning
+    /// null to it. Use <c>ClearAsync</c> to remove a group's rows.
+    /// </returns>
+    private Setting? BuildRowIfChanged(
+        TypeMap map, PropertyMap prop, object? raw, Dictionary<string, Setting> prevMap)
+    {
+        if (raw is null) return null;
+
+        var plaintext = Extensions.ConvertFrom(prop.PropertyType, raw);
+        var strValue  = plaintext;
+
+        var isEncrypted = false;
+        if (prop.IsSensitive && _encryptor is not null)
+        {
+            strValue    = _encryptor.Encrypt(strValue);
+            isEncrypted = true;
+        }
+
+        prevMap.TryGetValue(prop.Name, out var prev);
+
+        if (IsUnchanged(prev, isEncrypted, plaintext, map.GroupName, prop.Name)) return null;
+
+        return new Setting
+        {
+            Id          = prev?.Id ?? Guid.NewGuid(),
+            Group       = map.GroupName,
+            Key         = prop.Name,
+            Type        = prop.TypeName,
+            Value       = strValue,
+            IsEncrypted = isEncrypted,
+            UpdatedAt   = DateTime.UtcNow,
+
+            // The token this write is conditional on. Null for a property that has never
+            // been stored, which is a plain insert.
+            RowVersion  = prev?.RowVersion
+        };
     }
 
     internal async Task<bool> ExistsAsync<T>(bool allProperties, CancellationToken ct) where T : new()

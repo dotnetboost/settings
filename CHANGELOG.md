@@ -90,6 +90,17 @@ This project follows [Semantic Versioning](https://semver.org/).
   `DbContext`, which is what lets `.UseAuditStore<EfCoreAuditStore>()` go on resolving.
 
 ### Fixed
+- **`SetAsync(selector, value)` could revert another writer's change to a different property.**
+  It rebuilt the whole model *from the cache* and put it through the group write, which compares
+  every property against fresh store rows and writes whatever differs. A property another
+  instance had changed while this one's cache was warm therefore read back stale, counted as a
+  difference, and was written back — so a call that only meant to touch property A undid
+  someone's edit to property B, over a window as wide as `CacheDuration` (default 10 minutes)
+  rather than a round trip. It now builds and writes a single row for the named property;
+  nothing else is part of the write. Validators still see the whole group, built from a fresh
+  read, since a validator takes a model rather than a property. The XML doc understated this
+  twice — it said "reads the current group" when the read was cached, and framed the damage as
+  landing on the property being written — and has been corrected.
 - **`GetAsync` no longer hands every caller the same mutable object.** The cache held the mapped
   settings instance, so assigning to a property of what you read wrote into the entry every
   later reader of that group was served from — including `GET /api/settings/{group}`, which then
