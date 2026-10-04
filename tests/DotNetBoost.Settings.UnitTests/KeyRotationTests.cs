@@ -229,6 +229,6 @@ public class DecryptionFailureTests
         return new SettingManager(store.Object, cache.Object,
             new ServiceCollection().BuildServiceProvider(), NullLogger<SettingManager>.Instance,
             new AesSettingEncryptor(Convert.ToBase64String(RandomNumberGenerator.GetBytes(32))),
-            null, options);
+            actorAccessor: null, signal: null, options: options);
     }
 }

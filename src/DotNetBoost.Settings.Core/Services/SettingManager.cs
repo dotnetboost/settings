@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Runtime.CompilerServices;
 using System.Linq.Expressions;
 using System.Reflection;
 
@@ -19,6 +20,7 @@ public sealed partial class SettingManager : ISettingManager
     private readonly ISettingCache              _cache;
     private readonly ISettingEncryptor?         _encryptor;
     private readonly ISettingActorAccessor?     _actorAccessor;
+    private readonly ISettingChangeSignal        _signal;
     private readonly IServiceProvider           _sp;
     private readonly ILogger<SettingManager>    _logger;
     private readonly SettingOptions             _options;
@@ -37,9 +39,26 @@ public sealed partial class SettingManager : ISettingManager
     private static readonly ConcurrentDictionary<string, SemaphoreSlim> Locks = new();
 
     /// <summary>
-    /// Creates a manager. <paramref name="encryptor"/>, <paramref name="actorAccessor"/> and
-    /// <paramref name="options"/> are optional: omitting them disables encryption, leaves
-    /// <see cref="SettingWrite.Actor"/> unset, and applies the default options.
+    /// What is known about each cached group: the change-signal token the entry was loaded
+    /// under, and when that token was last re-checked.
+    /// <para>
+    /// Kept beside the cache rather than inside it. When a token was last checked is a fact
+    /// about this process, so it must not travel through a distributed <c>ISettingCache</c> to
+    /// other instances. It is keyed by the cache instance because a probe describes one
+    /// cache's entry: two managers sharing a cache must share probes, and two holding separate
+    /// caches must not. The table holds the cache weakly, so nothing is kept alive by it.
+    /// </para>
+    /// </summary>
+    private static readonly ConditionalWeakTable<ISettingCache, ConcurrentDictionary<string, CacheProbe>>
+        ProbesByCache = new();
+
+    private ConcurrentDictionary<string, CacheProbe> Probes => ProbesByCache.GetOrCreateValue(_cache);
+
+    /// <summary>
+    /// Creates a manager. <paramref name="encryptor"/>, <paramref name="actorAccessor"/>,
+    /// <paramref name="signal"/> and <paramref name="options"/> are optional: omitting them
+    /// disables encryption, leaves <see cref="SettingWrite.Actor"/> unset, keeps cache
+    /// invalidation local to this instance, and applies the default options.
     /// </summary>
     public SettingManager(
         ISettingStore            store,
@@ -48,6 +67,7 @@ public sealed partial class SettingManager : ISettingManager
         ILogger<SettingManager>  logger,
         ISettingEncryptor?       encryptor     = null,
         ISettingActorAccessor?   actorAccessor = null,
+        ISettingChangeSignal?    signal        = null,
         SettingOptions?          options       = null)
     {
         _store         = store  ?? throw new ArgumentNullException(nameof(store));
@@ -56,6 +76,7 @@ public sealed partial class SettingManager : ISettingManager
         _logger        = logger ?? throw new ArgumentNullException(nameof(logger));
         _encryptor     = encryptor;
         _actorAccessor = actorAccessor;
+        _signal        = signal ?? new NullSettingChangeSignal();
         _options       = options ?? new SettingOptions();
     }
 
@@ -79,15 +100,19 @@ public sealed partial class SettingManager : ISettingManager
         var map = GetTypeMap(typeof(T));
         var key = CacheKey(map);
 
-        if (!refreshCache && TryRowsFromCache(key, out var fast))
-            return MapToModel<T>(fast!);
+        if (!refreshCache && await TryServeFromCacheAsync(key, map, ct).ConfigureAwait(false) is { } fast)
+            return MapToModel<T>(fast);
 
         var locker = Locks.GetOrAdd(key, _ => new SemaphoreSlim(1, 1));
         await locker.WaitAsync(ct).ConfigureAwait(false);
         try
         {
-            if (!refreshCache && TryRowsFromCache(key, out var hit))
-                return MapToModel<T>(hit!);
+            if (!refreshCache && await TryServeFromCacheAsync(key, map, ct).ConfigureAwait(false) is { } hit)
+                return MapToModel<T>(hit);
+
+            // Read the token BEFORE the rows, so a write landing mid-read leaves a mismatch
+            // for the next check to catch rather than being recorded as already seen.
+            var version = await ReadSignalVersionAsync(map.GroupName, ct).ConfigureAwait(false);
 
             var rows = await _store.GetGroupAsync(map.GroupName, ct).ConfigureAwait(false);
 
@@ -95,11 +120,65 @@ public sealed partial class SettingManager : ISettingManager
             // has to serialise this, and an interface is not something every serialiser can
             // round-trip.
             _cache.Set(key, rows as Setting[] ?? [.. rows], CacheDuration);
+            Probes[key] = new CacheProbe(version, DateTimeOffset.UtcNow);
+
             return MapToModel<T>(rows);
         }
         finally
         {
             locker.Release();
+        }
+    }
+
+    /// <summary>
+    /// The cached rows for a group, or <c>null</c> to reload.
+    /// <para>
+    /// With the default no-op signal the token is always <c>null</c> on both sides, so this is
+    /// a cache lookup and nothing else — a single-instance application behaves exactly as it
+    /// did before change signalling existed. With a real signal, a cache hit is re-validated
+    /// at most once per <see cref="SettingOptions.ChangeCheckInterval"/>, which is what bounds
+    /// how long one instance can serve values another instance has already replaced.
+    /// </para>
+    /// </summary>
+    private async Task<Setting[]?> TryServeFromCacheAsync(string key, TypeMap map, CancellationToken ct)
+    {
+        if (!TryRowsFromCache(key, out var rows)) return null;
+
+        // No probe means this instance did not load the entry — a shared ISettingCache was
+        // populated by another one. MinValue makes the check due immediately, so the token is
+        // compared now rather than trusted.
+        var probe = Probes.GetValueOrDefault(key) ?? new CacheProbe(null, DateTimeOffset.MinValue);
+
+        var now = DateTimeOffset.UtcNow;
+        if (now - probe.CheckedAt < _options.ChangeCheckInterval) return rows;
+
+        var current = await ReadSignalVersionAsync(map.GroupName, ct).ConfigureAwait(false);
+
+        if (!string.Equals(current, probe.Version, StringComparison.Ordinal))
+            return null;
+
+        Probes[key] = probe with { CheckedAt = now };
+        return rows;
+    }
+
+    /// <summary>
+    /// The group's current change-signal token, or <c>null</c>.
+    /// <para>
+    /// An unreachable signal is logged and treated as "unchanged": it is an optimisation over
+    /// the cache duration, so failing a read because the signalling store is down would turn a
+    /// slower reload into an outage. The cache entry still expires on its own.
+    /// </para>
+    /// </summary>
+    private async Task<string?> ReadSignalVersionAsync(string groupName, CancellationToken ct)
+    {
+        try
+        {
+            return await _signal.GetVersionAsync(groupName, ct).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            LogChangeSignalUnreachable(_logger, groupName, ex);
+            return null;
         }
     }
 
@@ -163,7 +242,7 @@ public sealed partial class SettingManager : ISettingManager
 
         await _store.UpsertManyAsync(rows, ct).ConfigureAwait(false);
 
-        _cache.Remove(CacheKey<T>());
+        EvictLocally<T>();
 
         // One notification for the whole write, not one per row: the N properties of a single
         // save are one edit, and the shared correlation id is what says so.
@@ -226,7 +305,7 @@ public sealed partial class SettingManager : ISettingManager
 
         await _store.UpsertManyAsync([row], ct).ConfigureAwait(false);
 
-        _cache.Remove(CacheKey<T>());
+        EvictLocally<T>();
 
         await NotifyWrittenAsync(
             map, SettingWriteKind.Updated, BuildChanges(map, [row], prevMap), ct).ConfigureAwait(false);
@@ -295,7 +374,7 @@ public sealed partial class SettingManager : ISettingManager
     {
         var map = GetTypeMap(typeof(T));
         await _store.DeleteGroupAsync(map.GroupName, ct).ConfigureAwait(false);
-        _cache.Remove(CacheKey<T>());
+        EvictLocally<T>();
 
         // The most destructive operation in the library, and the one most worth reporting.
         // Changes is empty: the deletion is group-wide, and nothing is read back to enumerate
@@ -555,6 +634,17 @@ public sealed partial class SettingManager : ISettingManager
         throw new InvalidOperationException($"Selector must point directly at a property on {typeof(T).Name}.");
     }
 
+    /// <summary>
+    /// Drops the cache entry and the probe that describes it together. Keeping the probe
+    /// would let a stale "checked recently" outlive the entry it was about.
+    /// </summary>
+    private void EvictLocally<T>() where T : new()
+    {
+        var key = CacheKey<T>();
+        _cache.Remove(key);
+        Probes.TryRemove(key, out _);
+    }
+
     private bool TryRowsFromCache(string key, out Setting[]? rows)
         => _cache.TryGetValue(key, out rows) && rows is not null;
 
@@ -578,6 +668,10 @@ public sealed partial class SettingManager : ISettingManager
         Message = "Write observer {observer} threw for settings group '{group}'; the write itself succeeded.")]
     private static partial void LogWriteObserverFailed(ILogger logger, string observer, string group, Exception ex);
 
+    [LoggerMessage(EventId = 1008, Level = LogLevel.Warning,
+        Message = "Change signal unreachable for settings group '{group}'; serving the cached copy until it expires.")]
+    private static partial void LogChangeSignalUnreachable(ILogger logger, string group, Exception ex);
+
     [LoggerMessage(EventId = 1003, Level = LogLevel.Error,
         Message = "Failed to decrypt setting '{group}.{key}'; using default.")]
     private static partial void LogDecryptFailed(ILogger logger, string group, string key, Exception ex);
@@ -593,6 +687,9 @@ public sealed partial class SettingManager : ISettingManager
     [LoggerMessage(EventId = 1005, Level = LogLevel.Warning,
         Message = "Cannot decrypt the stored value of '{group}.{key}' to compare it; treating it as changed.")]
     private static partial void LogChangeCompareFailed(ILogger logger, string group, string key, Exception ex);
+
+    /// <summary>What this instance's cached copy of a group was loaded under, and when it was last re-checked.</summary>
+    private sealed record CacheProbe(string? Version, DateTimeOffset CheckedAt);
 
     private sealed record TypeMap(string GroupName, string Route, IReadOnlyList<PropertyMap> Properties);
 

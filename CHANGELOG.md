@@ -44,6 +44,21 @@ This project follows [Semantic Versioning](https://semver.org/).
   decides what is sensitive and an observer only learns that it changed; redaction follows the
   attribute rather than whether the value happened to be encrypted at rest, so it holds with no
   encryptor configured.
+- **`ISettingChangeSignal`, and `.SynchronizeThroughDistributedCache()`** — settings now
+  propagate between application instances. A write evicted the local `IMemoryCache` entry and
+  nothing else, so every other instance went on serving the old values for up to
+  `CacheDuration` (10 minutes by default): "change it, reload, done, no redeploy" silently
+  stopped being true at two replicas, in a repo that ships an Aspire AppHost.
+  Each write publishes a fresh token for that group, and a cache hit re-checks the token at
+  most once per `ChangeCheckInterval` — **5 seconds by default, and that interval is the
+  staleness bound, not zero**. What this buys is a bound of seconds rather than minutes, not
+  instant propagation. Publishing is wired up as an `ISettingWriteObserver`, so `ClearAsync`
+  propagates without a second call site. An unreachable signalling store is logged and treated
+  as unchanged — a signal is an optimisation over the cache duration, so a Redis outage costs a
+  slower reload, not an error. Register your own transport with `UseChangeSignal<T>()`.
+  The default signals nothing, so a single-instance application needs no configuration and
+  behaves exactly as before. Note that this is cache coherence only: `ISettingChangedHandler<T>`
+  and `ISettingWriteObserver` stay in-process by design.
 - **`ISettingActorAccessor`**, and `.UseHttpContextActor()` in the API package, which reads
   `ClaimTypes.NameIdentifier` then `Identity.Name` off the current request. `Actor` is nullable
   and `null` means *not captured* — never a placeholder, which is what made the old `ChangedBy`
