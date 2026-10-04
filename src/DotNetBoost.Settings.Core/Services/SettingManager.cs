@@ -4,6 +4,7 @@ using DotNetBoost.Settings.Core.Models;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Linq.Expressions;
 using System.Reflection;
 
@@ -17,13 +18,10 @@ public sealed partial class SettingManager : ISettingManager
     private readonly ISettingStore              _store;
     private readonly ISettingCache              _cache;
     private readonly ISettingEncryptor?         _encryptor;
-    private readonly ISettingAuditStore?        _auditStore;
+    private readonly ISettingActorAccessor?     _actorAccessor;
     private readonly IServiceProvider           _sp;
     private readonly ILogger<SettingManager>    _logger;
     private readonly SettingOptions             _options;
-
-    /// <summary>Placeholder written to the audit trail in place of an encrypted value.</summary>
-    private const string EncryptedPlaceholder = "[encrypted]";
 
     internal TimeSpan CacheDuration => _options.CacheDuration;
 
@@ -39,26 +37,26 @@ public sealed partial class SettingManager : ISettingManager
     private static readonly ConcurrentDictionary<string, SemaphoreSlim> Locks = new();
 
     /// <summary>
-    /// Creates a manager. <paramref name="encryptor"/>, <paramref name="auditStore"/> and
-    /// <paramref name="options"/> are optional: omitting them disables encryption and
-    /// auditing, and applies the default options.
+    /// Creates a manager. <paramref name="encryptor"/>, <paramref name="actorAccessor"/> and
+    /// <paramref name="options"/> are optional: omitting them disables encryption, leaves
+    /// <see cref="SettingWrite.Actor"/> unset, and applies the default options.
     /// </summary>
     public SettingManager(
         ISettingStore            store,
         ISettingCache            cache,
         IServiceProvider         sp,
         ILogger<SettingManager>  logger,
-        ISettingEncryptor?       encryptor  = null,
-        ISettingAuditStore?      auditStore = null,
-        SettingOptions?          options    = null)
+        ISettingEncryptor?       encryptor     = null,
+        ISettingActorAccessor?   actorAccessor = null,
+        SettingOptions?          options       = null)
     {
-        _store      = store      ?? throw new ArgumentNullException(nameof(store));
-        _cache      = cache      ?? throw new ArgumentNullException(nameof(cache));
-        _sp         = sp         ?? throw new ArgumentNullException(nameof(sp));
-        _logger     = logger     ?? throw new ArgumentNullException(nameof(logger));
-        _encryptor  = encryptor;
-        _auditStore = auditStore;
-        _options    = options ?? new SettingOptions();
+        _store         = store  ?? throw new ArgumentNullException(nameof(store));
+        _cache         = cache  ?? throw new ArgumentNullException(nameof(cache));
+        _sp            = sp     ?? throw new ArgumentNullException(nameof(sp));
+        _logger        = logger ?? throw new ArgumentNullException(nameof(logger));
+        _encryptor     = encryptor;
+        _actorAccessor = actorAccessor;
+        _options       = options ?? new SettingOptions();
     }
 
     /// <inheritdoc/>
@@ -129,8 +127,8 @@ public sealed partial class SettingManager : ISettingManager
 
         // One authoritative read of the stored state, serving four purposes: deciding what
         // actually changed, supplying the concurrency token each write is conditional on,
-        // giving the audit trail its before-values, and the model handed to change handlers.
-        // It deliberately bypasses the cache — a stale token would fail every write.
+        // giving the write notification its before-values, and the model handed to change
+        // handlers. It deliberately bypasses the cache — a stale token would fail every write.
         var prevRows = await _store.GetGroupAsync(map.GroupName, ct).ConfigureAwait(false);
         var prevMap  = prevRows.ToDictionary(r => r.Key, StringComparer.OrdinalIgnoreCase);
 
@@ -196,23 +194,10 @@ public sealed partial class SettingManager : ISettingManager
 
         _cache.Remove(CacheKey<T>());
 
-        if (_auditStore is not null)
-        {
-            // rows already holds only what changed, so every one of them earns an entry.
-            foreach (var row in rows)
-            {
-                prevMap.TryGetValue(row.Key, out var prev);
-                await _auditStore.RecordAsync(new SettingAuditEntry
-                {
-                    Group     = row.Group,
-                    Key       = row.Key,
-                    OldValue  = prev is null ? string.Empty
-                              : prev.IsEncrypted ? EncryptedPlaceholder : prev.Value,
-                    NewValue  = row.IsEncrypted ? EncryptedPlaceholder : row.Value,
-                    ChangedBy = "system"
-                }, ct).ConfigureAwait(false);
-            }
-        }
+        // One notification for the whole write, not one per row: the N properties of a single
+        // save are one edit, and the shared correlation id is what says so.
+        await NotifyWrittenAsync(
+            map, SettingWriteKind.Updated, BuildChanges(map, rows, prevMap), ct).ConfigureAwait(false);
 
         await FireChangedHandlersAsync(previous, model, map.GroupName, ct).ConfigureAwait(false);
 
@@ -242,12 +227,91 @@ public sealed partial class SettingManager : ISettingManager
         var map = GetTypeMap(typeof(T));
         await _store.DeleteGroupAsync(map.GroupName, ct).ConfigureAwait(false);
         _cache.Remove(CacheKey<T>());
+
+        // The most destructive operation in the library, and the one most worth reporting.
+        // Changes is empty: the deletion is group-wide, and nothing is read back to enumerate
+        // what was there — SettingWriteKind.Cleared is what carries the meaning.
+        await NotifyWrittenAsync(map, SettingWriteKind.Cleared, [], ct).ConfigureAwait(false);
+
         LogGroupCleared(_logger, map.GroupName);
     }
 
     /// <summary>
-    /// Decides whether a written row is identical to what was already stored, so the audit
-    /// trail can skip it. Encrypted values are compared as plaintext: AES-GCM draws a fresh
+    /// Turns the rows about to be written, and the state they replaced, into the per-property
+    /// diff an observer is handed. <paramref name="rows"/> already holds only what changed.
+    /// </summary>
+    private static List<SettingChange> BuildChanges(
+        TypeMap map, List<Setting> rows, Dictionary<string, Setting> prevMap)
+    {
+        var sensitive = map.Properties
+            .Where(p => p.IsSensitive)
+            .Select(p => p.Name)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var changes = new List<SettingChange>(rows.Count);
+
+        foreach (var row in rows)
+        {
+            // Redaction is decided here rather than by the observer, so a [Sensitive] value
+            // cannot escape through a recording or forwarding observer by omission.
+            if (sensitive.Contains(row.Key))
+            {
+                changes.Add(new SettingChange(row.Key, null, null, IsRedacted: true));
+                continue;
+            }
+
+            prevMap.TryGetValue(row.Key, out var prev);
+            changes.Add(new SettingChange(row.Key, prev?.Value, row.Value, IsRedacted: false));
+        }
+
+        return changes;
+    }
+
+    /// <summary>
+    /// Reports a completed write to every registered <see cref="ISettingWriteObserver"/>.
+    /// <para>
+    /// Each observer is wrapped on its own: the write has already committed and the cache
+    /// entry is already gone, so an observer's exception must neither fail the caller nor
+    /// skip the observers after it. Same policy as
+    /// <see cref="FireChangedHandlersAsync{T}"/>, and the two are documented as a pair.
+    /// </para>
+    /// </summary>
+    private async Task NotifyWrittenAsync(
+        TypeMap map, SettingWriteKind kind, IReadOnlyList<SettingChange> changes, CancellationToken ct)
+    {
+        var observers = _sp.GetServices<ISettingWriteObserver>() as IList<ISettingWriteObserver>
+                        ?? [.. _sp.GetServices<ISettingWriteObserver>()];
+
+        if (observers.Count == 0) return;
+
+        var write = new SettingWrite(
+            GroupName:     map.GroupName,
+            Route:         map.Route,
+            Kind:          kind,
+            Changes:       changes,
+            Actor:         _actorAccessor?.GetActor(),
+
+            // One id for the whole write. The ambient Activity when there is one, so the edit
+            // joins the surrounding trace rather than being correlatable only with itself.
+            CorrelationId: Activity.Current?.Id ?? Guid.NewGuid().ToString("n"),
+            OccurredAt:    DateTime.UtcNow);
+
+        foreach (var observer in observers)
+        {
+            try
+            {
+                await observer.OnWrittenAsync(write, ct).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                LogWriteObserverFailed(_logger, observer.GetType().Name, map.GroupName, ex);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Decides whether a written row is identical to what was already stored, so neither the
+    /// store nor an observer sees it. Encrypted values are compared as plaintext: AES-GCM draws a fresh
     /// nonce per call, so re-encrypting an unchanged secret always produces different
     /// ciphertext and would otherwise look like a change on every single save.
     /// Anything that cannot be compared with confidence is reported as changed.
@@ -271,7 +335,7 @@ public sealed partial class SettingManager : ISettingManager
         }
         catch (Exception ex)
         {
-            LogAuditCompareFailed(_logger, group, key, ex);
+            LogChangeCompareFailed(_logger, group, key, ex);
             return false;
         }
     }
@@ -368,7 +432,12 @@ public sealed partial class SettingManager : ISettingManager
                 .Select(BuildPropertyMap)
                 .ToList();
 
-            return new TypeMap(SettingGroupAttribute.ResolveName(t), props);
+            // Route falls back to the persistence key for a settings class with no
+            // [SettingGroup] — it has no endpoint, but a write to it is still addressable.
+            var route = t.GetCustomAttribute<SettingGroupAttribute>()?.Route;
+            var name  = SettingGroupAttribute.ResolveName(t);
+
+            return new TypeMap(name, string.IsNullOrWhiteSpace(route) ? name : route, props);
         });
 
     private static PropertyMap BuildPropertyMap(PropertyInfo p)
@@ -436,6 +505,10 @@ public sealed partial class SettingManager : ISettingManager
         Message = "Change handler {handler} threw for settings group '{group}'.")]
     private static partial void LogChangeHandlerFailed(ILogger logger, string handler, string group, Exception ex);
 
+    [LoggerMessage(EventId = 1007, Level = LogLevel.Error,
+        Message = "Write observer {observer} threw for settings group '{group}'; the write itself succeeded.")]
+    private static partial void LogWriteObserverFailed(ILogger logger, string observer, string group, Exception ex);
+
     [LoggerMessage(EventId = 1003, Level = LogLevel.Error,
         Message = "Failed to decrypt setting '{group}.{key}'; using default.")]
     private static partial void LogDecryptFailed(ILogger logger, string group, string key, Exception ex);
@@ -449,10 +522,10 @@ public sealed partial class SettingManager : ISettingManager
     private static partial void LogGroupUnchanged(ILogger logger, string group);
 
     [LoggerMessage(EventId = 1005, Level = LogLevel.Warning,
-        Message = "Cannot decrypt the stored value of '{group}.{key}' to compare it; recording an audit entry anyway.")]
-    private static partial void LogAuditCompareFailed(ILogger logger, string group, string key, Exception ex);
+        Message = "Cannot decrypt the stored value of '{group}.{key}' to compare it; treating it as changed.")]
+    private static partial void LogChangeCompareFailed(ILogger logger, string group, string key, Exception ex);
 
-    private sealed record TypeMap(string GroupName, IReadOnlyList<PropertyMap> Properties);
+    private sealed record TypeMap(string GroupName, string Route, IReadOnlyList<PropertyMap> Properties);
 
     private sealed record PropertyMap(
         string Name,

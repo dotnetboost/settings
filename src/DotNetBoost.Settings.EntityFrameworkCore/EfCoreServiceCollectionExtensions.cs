@@ -18,17 +18,16 @@ namespace Microsoft.Extensions.DependencyInjection
         /// </para>
         /// </summary>
         /// <remarks>
-        /// Also registers <typeparamref name="TContext"/> as the scoped <see cref="DbContext"/>,
-        /// which is what lets <c>.UseAuditStore&lt;EfCoreAuditStore&gt;()</c> resolve. In an
-        /// application with several contexts this makes <typeparamref name="TContext"/> the one
-        /// a bare <c>DbContext</c> dependency gets; the settings store itself always uses
-        /// <typeparamref name="TContext"/> regardless.
+        /// Registers nothing against <see cref="DbContext"/> itself. The store is constructed
+        /// from <typeparamref name="TContext"/> explicitly, so the library never claims a
+        /// framework type it does not own — which in an application with two contexts would
+        /// silently hand a bare <c>DbContext</c> dependency whichever one Settings was
+        /// pointed at.
         /// </remarks>
         public static SettingBuilder UseEntityFrameworkCore<TContext>(this SettingBuilder builder)
             where TContext : DbContext
         {
             SettingBuilderGuard.EnsureProviderNotConfigured(builder, "EntityFrameworkCore");
-            builder.Services.AddScoped<DbContext>(sp => sp.GetRequiredService<TContext>());
             builder.Services.AddScoped<ISettingStore>(
                 sp => new EfCoreSettingStore(sp.GetRequiredService<TContext>()));
             return builder;

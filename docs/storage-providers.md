@@ -41,8 +41,8 @@ protected override void OnModelCreating(ModelBuilder mb)
 
 > **Upgrading from `1.0.0-preview.1`?** `ISettingDbContext` is obsolete and does nothing.
 > Delete `: ISettingDbContext` and the two `DbSet` properties; nothing else changes.
-> `UseEntityFrameworkCore<TContext>()` now also registers your context as the scoped
-> `DbContext`, which is what lets `UseAuditStore<EfCoreAuditStore>()` resolve.
+> `UseEntityFrameworkCore<TContext>()` registers nothing against `DbContext` itself, so the
+> library never claims a framework type it does not own.
 
 ```csharp
 builder.Services.AddDbContext<AppDbContext>(o => o.UseSqlite("Data Source=app.db"));
@@ -51,7 +51,7 @@ builder.Services.AddSettings()
     .Build();
 ```
 
-Run `dotnet ef migrations add Init && dotnet ef database update` — this creates both the `Settings` and `SettingAudits` tables.
+Run `dotnet ef migrations add Init && dotnet ef database update` — this creates the `Settings` table.
 
 ## Dapper
 
@@ -66,7 +66,7 @@ builder.Services.AddSettings()
     .Build();
 ```
 
-Supports `SqlConnection`, `NpgsqlConnection`, and `SqliteConnection`. `migrateSchema: true` auto-creates `Settings` and `SettingAudits` tables on startup.
+Supports `SqlConnection`, `NpgsqlConnection`, and `SqliteConnection`. `migrateSchema: true` auto-creates the `Settings` table on startup.
 
 ## MongoDB
 

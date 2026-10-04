@@ -120,23 +120,14 @@ public interface ISettingEncryptor
 }
 
 /// <summary>
-/// Persists a full history of setting changes.
-/// Register an implementation to enable auditing.
-/// </summary>
-public interface ISettingAuditStore
-{
-    /// <summary>Appends one entry to the change history.</summary>
-    Task RecordAsync(SettingAuditEntry entry, CancellationToken ct = default);
-
-    /// <summary>Reads the change history for a group, optionally narrowed to a single property.</summary>
-    Task<IReadOnlyList<SettingAuditEntry>> GetHistoryAsync(
-        string group, string? key = null, CancellationToken ct = default);
-}
-
-/// <summary>
 /// Receives a notification whenever the settings group <typeparamref name="T"/> is written.
 /// Register one or more implementations in DI; all will be invoked in registration order.
 /// </summary>
+/// <remarks>
+/// The typed half of the notification pair. For the per-property diff of every group, with
+/// the actor and a correlation id, implement <see cref="ISettingWriteObserver"/> instead.
+/// Both are in-process, and both have their exceptions logged and swallowed.
+/// </remarks>
 public interface ISettingChangedHandler<T> where T : new()
 {
     /// <summary>

@@ -74,21 +74,6 @@ public sealed class EfCoreSqlServerStoreTests(SqlServerFixture fixture)
         Assert.Equal(big, (await store.GetAsync("Mail", "Blob"))!.Value);
     }
 
-    [Fact]
-    public async Task AuditStore_RecordsAndReadsBackHistory()
-    {
-        var ctx   = await NewContextAsync();
-        var audit = new EfCoreAuditStore(ctx);
-
-        await audit.RecordAsync(new SettingAuditEntry
-        {
-            Group = "Mail", Key = "Host", OldValue = "old", NewValue = "new", ChangedBy = "tester"
-        });
-
-        var history = await audit.GetHistoryAsync("Mail", "Host");
-        Assert.Equal("old", Assert.Single(history).OldValue);
-    }
-
     public Task InitializeAsync() => Task.CompletedTask;
 
     public async Task DisposeAsync()

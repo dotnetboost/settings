@@ -48,28 +48,3 @@ public sealed class Setting
     /// <summary>Generates a fresh concurrency token. Stores call this when writing a row.</summary>
     public static byte[] NewRowVersion() => Guid.NewGuid().ToByteArray();
 }
-
-/// <summary>Immutable record of a historical change to a setting value.</summary>
-public sealed class SettingAuditEntry
-{
-    /// <summary>Surrogate primary key for the audit row.</summary>
-    public Guid     Id          { get; set; } = Guid.NewGuid();
-
-    /// <summary>Persistence key of the settings group the change belongs to.</summary>
-    public required string Group       { get; set; }
-
-    /// <summary>Name of the property that changed.</summary>
-    public required string Key         { get; set; }
-
-    /// <summary>Value before the change, or empty on first write. Encrypted values read <c>[encrypted]</c>.</summary>
-    public required string OldValue    { get; set; }
-
-    /// <summary>Value after the change. Encrypted values read <c>[encrypted]</c>.</summary>
-    public required string NewValue    { get; set; }
-
-    /// <summary>Who made the change.</summary>
-    public required string ChangedBy   { get; set; }
-
-    /// <summary>UTC timestamp of the change.</summary>
-    public DateTime ChangedAt  { get; set; } = DateTime.UtcNow;
-}

@@ -13,7 +13,10 @@
 | `.UseAesEncryption(key, retiredKeys...)` | Core | Enable built-in AES-256-GCM encryption; retired keys decrypt only |
 | `.IgnoreDecryptionFailures()` | Core | Fall back to defaults instead of throwing when a value will not decrypt |
 | `.UseCustomEncryption<TEncryptor>()` | Core | Plug in a custom encryptor |
-| `.UseAuditStore<TStore>()` | Core (+ EF Core impl) | Enable change history |
+| `.UseWriteObserver<TObserver>()` | Core | Observe every completed write; several may be registered |
+| `.UseLoggingWriteObserver()` | Core | Log one line per write — property names, never values |
+| `.UseActorAccessor<TAccessor>()` | Core | Supply who is making the change |
+| `.UseHttpContextActor()` | API | Take the actor from the signed-in user of the request |
 | `.OnChanged<TSettings, THandler>()` | Core | Register a runtime change handler |
 | `.UseProjector<TSettings, TProjector>()` | Core (applied by API) | Reshape a group for `GET` only; never touches the `ETag` |
 | `.UseFluentValidation(assembly)` | FluentValidation | Register validators |

@@ -72,23 +72,6 @@ public sealed class EfCorePostgresStoreTests(PostgreSqlFixture fixture)
         await Assert.ThrowsAsync<DbUpdateException>(() => ctx.SaveChangesAsync());
     }
 
-    [Fact]
-    public async Task AuditStore_RecordsAndReadsBackHistory()
-    {
-        var ctx   = await NewContextAsync();
-        var audit = new EfCoreAuditStore(ctx);
-
-        await audit.RecordAsync(new SettingAuditEntry
-        {
-            Group = "Mail", Key = "Port", OldValue = "25", NewValue = "587", ChangedBy = "tester"
-        });
-
-        var history = await audit.GetHistoryAsync("Mail", "Port");
-        Assert.Single(history);
-        Assert.Equal("587", history[0].NewValue);
-        Assert.Equal("tester", history[0].ChangedBy);
-    }
-
     public Task InitializeAsync() => Task.CompletedTask;
 
     public async Task DisposeAsync()

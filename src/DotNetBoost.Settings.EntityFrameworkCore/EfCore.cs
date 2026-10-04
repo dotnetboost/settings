@@ -29,7 +29,7 @@ public enum DatabaseProvider
 /// </summary>
 /// <remarks>
 /// Kept for one release so existing contexts keep compiling. Delete the
-/// <c>: ISettingDbContext</c> and the two <c>DbSet</c> properties; nothing else changes.
+/// <c>: ISettingDbContext</c> and the <c>DbSet</c> property; nothing else changes.
 /// </remarks>
 [Obsolete("ISettingDbContext is no longer used. Remove it and the DbSet properties from your " +
           "DbContext; UseEntityFrameworkCore<TContext>() only needs a DbContext. " +
@@ -37,10 +37,7 @@ public enum DatabaseProvider
 public interface ISettingDbContext
 {
     /// <summary>The persisted settings rows.</summary>
-    DbSet<Setting>           Settings      { get; }
-
-    /// <summary>The change-history rows.</summary>
-    DbSet<SettingAuditEntry> SettingAudits { get; }
+    DbSet<Setting> Settings { get; }
 
     /// <summary>Persists pending changes.</summary>
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
@@ -86,28 +83,11 @@ public sealed class SettingConfiguration(DatabaseProvider provider)
     }
 }
 
-/// <summary>Entity mapping for <see cref="SettingAuditEntry"/>.</summary>
-public sealed class SettingAuditConfiguration : IEntityTypeConfiguration<SettingAuditEntry>
-{
-    /// <inheritdoc/>
-    public void Configure(EntityTypeBuilder<SettingAuditEntry> builder)
-    {
-        builder.ToTable("SettingAudits");
-        builder.HasKey(x => x.Id);
-        builder.Property(x => x.Id).ValueGeneratedNever();
-        builder.Property(x => x.Group).HasColumnName("SettingGroup").HasMaxLength(191).IsRequired();
-        builder.Property(x => x.Key).HasColumnName("SettingKey").HasMaxLength(191).IsRequired();
-        builder.Property(x => x.ChangedBy).HasMaxLength(256).IsRequired();
-        builder.Property(x => x.ChangedAt).IsRequired();
-        builder.HasIndex(x => new { x.Group, x.Key });
-    }
-}
-
 /// <summary>Model-building helpers for wiring the settings entities into a DbContext.</summary>
 public static class ModelBuilderExtensions
 {
     /// <summary>
-    /// Applies both settings entity configurations. Call from <c>OnModelCreating</c>.
+    /// Applies the settings entity configuration. Call from <c>OnModelCreating</c>.
     /// </summary>
     /// <param name="mb">The model builder.</param>
     /// <param name="provider">The engine being targeted.</param>
@@ -115,12 +95,11 @@ public static class ModelBuilderExtensions
     {
         ArgumentNullException.ThrowIfNull(mb);
         mb.ApplyConfiguration(new SettingConfiguration(provider));
-        mb.ApplyConfiguration(new SettingAuditConfiguration());
         return mb;
     }
 
     /// <summary>
-    /// Applies both settings entity configurations, taking the engine from
+    /// Applies the settings entity configuration, taking the engine from
     /// <paramref name="context"/> rather than being told it. Call from
     /// <c>OnModelCreating</c> as <c>modelBuilder.ApplySettingsConfiguration(this)</c>.
     /// <para>
@@ -266,29 +245,5 @@ public sealed class EfCoreSettingStore(DbContext db) : ISettingStore
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(group);
         return Settings.CountAsync(x => x.Group == group, ct);
-    }
-}
-
-/// <summary>EF Core-backed audit store. Registered via <c>.UseAuditStore&lt;EfCoreAuditStore&gt;()</c>.</summary>
-/// <param name="db">The context the audit entity is mapped on.</param>
-public sealed class EfCoreAuditStore(DbContext db) : ISettingAuditStore
-{
-    private DbSet<SettingAuditEntry> SettingAudits => db.Set<SettingAuditEntry>();
-
-    /// <inheritdoc/>
-    public async Task RecordAsync(SettingAuditEntry entry, CancellationToken ct = default)
-    {
-        ArgumentNullException.ThrowIfNull(entry);
-        await SettingAudits.AddAsync(entry, ct).ConfigureAwait(false);
-        await db.SaveChangesAsync(ct).ConfigureAwait(false);
-    }
-
-    /// <inheritdoc/>
-    public async Task<IReadOnlyList<SettingAuditEntry>> GetHistoryAsync(string group, string? key = null, CancellationToken ct = default)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(group);
-        var q = SettingAudits.AsNoTracking().Where(x => x.Group == group);
-        if (key is not null) q = q.Where(x => x.Key == key);
-        return await q.OrderByDescending(x => x.ChangedAt).ToListAsync(ct).ConfigureAwait(false);
     }
 }

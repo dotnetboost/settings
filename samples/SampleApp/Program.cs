@@ -103,12 +103,7 @@ var encryptionKey = builder.Configuration["Settings:EncryptionKey"]
 var settings = builder.Services.AddSettings();
 
 // ── Store registration, one line per provider ────────────────────────────────
-// EfCoreAuditStore is what backs GET /api/settings/{route}/audit. ISettingAuditStore is
-// optional, so a provider without one simply records no history — MongoDB has no
-// implementation yet, and the Dapper store writes its SettingAudits table only when its
-// own schema migration has run.
-settings.UseEntityFrameworkCore<AppDbContext>()
-        .UseAuditStore<DotNetBoost.Settings.EntityFrameworkCore.EfCoreAuditStore>();
+settings.UseEntityFrameworkCore<AppDbContext>();
 
 // MongoDB:  settings.UseMongoDb(mongoConnectionString, databaseName: "settingsdb");
 // Dapper:   (add `using Npgsql;` at the top)
@@ -123,6 +118,15 @@ settings
     .UseAesEncryption(encryptionKey)
     .UseFluentValidation(Assembly.GetExecutingAssembly())
     .OnChanged<MailSettings, MailSettingsChangedHandler>()
+
+    // Every completed write is reported through ISettingWriteObserver. This one logs the
+    // group, the actor and the names of the properties that changed — never their values.
+    // Swap it for your own observer to record, forward or index writes.
+    .UseLoggingWriteObserver()
+
+    // Fills SettingWrite.Actor from the signed-in user. The sample has no identity provider,
+    // so it stays null here; it is the line a real application needs.
+    .UseHttpContextActor()
     .Build();
 
 builder.Services.AddScoped<MailSettingsChangedHandler>();
@@ -137,8 +141,9 @@ builder.Services.AddOpenApi(options =>
         document.Info.Version     = "v1";
         document.Info.Description =
             "Runtime settings served from PostgreSQL. Each [SettingGroup] class is exposed as "
-            + "GET (read), POST (update) and GET /audit (change history). Properties marked "
-            + "[Sensitive] are encrypted at rest and shown as \"[encrypted]\" in the audit trail.";
+            + "GET (read) and POST (update). Properties marked [Sensitive] are encrypted at "
+            + "rest, and their values are withheld from the write notifications the library "
+            + "raises.";
         return Task.CompletedTask;
     }));
 

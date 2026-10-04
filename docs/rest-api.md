@@ -14,10 +14,12 @@ Registers, per `[SettingGroup]` class:
 |---|---|---|
 | `GET`  | `/api/settings/{route}` | Current values, with an `ETag` for the revision |
 | `POST` | `/api/settings/{route}` | Validate + persist; honours `If-Match`, `412` on a lost race |
-| `GET`  | `/api/settings/{route}/audit` | Change history (`404` if no audit store configured) |
 
-All three carry the OpenAPI tag `Settings`, so they group themselves in Swagger or Scalar
-without being wrapped in a `MapGroup("")` purely to hang a tag on.
+Both carry the OpenAPI tag `Settings`, so they group themselves in Swagger or Scalar without
+being wrapped in a `MapGroup("")` purely to hang a tag on.
+
+> There is no `/audit` endpoint. Auditing is not built in — see
+> [Write notifications](write-notifications.md) for the hook that replaced it.
 
 ## Reshaping what GET returns
 

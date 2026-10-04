@@ -31,7 +31,7 @@ What comes up:
 | Resource | What it is |
 |---|---|
 | `postgres` / `settingsdb` | PostgreSQL 18 container, named volume, persistent across runs |
-| `pgweb` | Browser SQL client for inspecting `Settings` and `SettingAudits` |
+| `pgweb` | Browser SQL client for inspecting the `Settings` table |
 | `cache` | Redis container backing `RedisSettingCache` |
 | `redisinsight` | Browser UI for watching the cache fill and expire |
 | `api` | `samples/SampleApp` — the REST endpoints and the Scalar reference at `/scalar` |
