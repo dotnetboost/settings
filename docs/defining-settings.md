@@ -4,15 +4,15 @@
 [SettingGroup("payment", Name = "PaymentSettings")]
 public class PaymentSettings
 {
-    public string  GatewayUrl  { get; set; } = "https://gateway.example.com";
+    public string GatewayUrl { get; set; } = "https://gateway.example.com";
 
     [Sensitive]                          // encrypted at rest
-    public string  ApiKey      { get; set; } = string.Empty;
+    public string ApiKey { get; set; } = string.Empty;
 
     [SettingDefault(10_000)]             // used when no row exists yet
-    public decimal MaxAmount   { get; set; } = 10_000m;
+    public decimal MaxAmount { get; set; } = 10_000m;
 
-    public bool    SandboxMode { get; set; } = true;
+    public bool SandboxMode { get; set; } = true;
 }
 ```
 
