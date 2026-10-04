@@ -63,6 +63,11 @@ This project follows [Semantic Versioning](https://semver.org/).
   `Must(...)`, a comparison against another property — is skipped rather than guessed at, since
   a wrong published bound is worse than a missing one. With no contributor registered the schema
   simply reports no constraints.
+- `ISettingProjector<T>` now states its failure semantics: a projector that throws **fails the
+  request**, deliberately unlike `ISettingChangedHandler<T>` and `ISettingWriteObserver`, whose
+  exceptions are logged and swallowed. A failed notification must not break a write that has
+  already committed; a failed projection would otherwise hide a wrong response. Behaviour
+  unchanged — it was simply never written down, and is now covered by a test.
 - **`SettingSchema.Describe(Type)`** in Core, which is also now the single place the rule for
   *which* properties the engine stores is written, shared with `SettingManager`.
 - **`ISettingChangeSignal`, and `.SynchronizeThroughDistributedCache()`** — settings now

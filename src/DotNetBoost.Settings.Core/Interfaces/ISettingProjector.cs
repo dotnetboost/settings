@@ -12,7 +12,7 @@ namespace DotNetBoost.Settings.Core.Interfaces;
 /// </para>
 /// </summary>
 /// <remarks>
-/// Three properties hold, and the generated endpoints are what hold them:
+/// Four properties hold, and the generated endpoints are what hold them:
 /// <list type="bullet">
 /// <item>
 /// <description>
@@ -32,6 +32,15 @@ namespace DotNetBoost.Settings.Core.Interfaces;
 /// <description>
 /// <b>No projector registered is today's behaviour, byte for byte.</b> The group is serialised
 /// exactly as it was before.
+/// </description>
+/// </item>
+/// <item>
+/// <description>
+/// <b>A projector that throws fails the request.</b> This is deliberately unlike
+/// <see cref="ISettingChangedHandler{T}"/> and <see cref="ISettingWriteObserver"/>, whose
+/// exceptions are logged and swallowed: a failed notification must not break a write that has
+/// already committed, whereas a failed projection means the response would be wrong, and a
+/// wrong response must not be hidden.
 /// </description>
 /// </item>
 /// </list>
