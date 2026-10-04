@@ -52,7 +52,7 @@ builder.Services.AddSettings()
 ```
 
 Projectors are registered scoped, so they can depend on anything else in the request scope.
-Three rules make this safe to have:
+Four rules make this safe to have:
 
 - **Read path only.** `POST` never consults a projector, so it cannot influence what is stored.
   The projected shape is an output shape; it is not something you can post back.
@@ -60,6 +60,11 @@ Three rules make this safe to have:
   from projected output would move with the request's language, and `If-Match` would stop
   protecting anything.
 - **No projector registered is the previous behaviour, byte for byte.**
+- **A projector that throws fails the request** — deliberately unlike
+  [`ISettingChangedHandler<T>` and `ISettingWriteObserver`](write-notifications.md#failure-policy),
+  whose exceptions are logged and swallowed. A failed notification must not break a write that
+  has already committed; a failed projection means the response would be wrong, and a wrong
+  response must not be hidden.
 
 Programmatic reads are unaffected: `For<T>().GetAsync()` always returns the stored group.
 Note that the OpenAPI schema for `GET` still describes `T` — the document cannot know what your

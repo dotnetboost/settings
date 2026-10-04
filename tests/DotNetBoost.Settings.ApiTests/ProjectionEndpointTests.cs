@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using DotNetBoost.Settings.Core.Attributes;
@@ -82,6 +83,28 @@ public class ProjectionEndpointTests
         Assert.Equal(0, projector.Calls);
     }
 
+    /// <summary>
+    /// Deliberately unlike a notification, whose exception is logged and swallowed. A failed
+    /// notification must not break a write that already committed; a failed projection means
+    /// the response would be wrong, and a wrong response must not be hidden.
+    /// </summary>
+    [Fact]
+    public async Task Get_WithAProjectorThatThrows_FailsTheRequest()
+    {
+        await using var app = await TestApp.StartAsync(
+            s => s.AddScoped<ISettingProjector<ProjectedSettings>, ThrowingProjector>());
+
+        // The test host rethrows an unhandled exception rather than turning it into a 500, so
+        // either outcome proves the point: the failure is not swallowed.
+        var failure = await Record.ExceptionAsync(() => app.Client.GetAsync(Url));
+
+        if (failure is null)
+        {
+            var response = await app.Client.GetAsync(Url);
+            Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
+        }
+    }
+
     [Fact]
     public async Task Projector_DoesNotAffectProgrammaticReads()
     {
@@ -115,6 +138,12 @@ internal sealed class UppercasingProjector : ISettingProjector<ProjectedSettings
             Language    = "xx-test"
         });
     }
+}
+
+internal sealed class ThrowingProjector : ISettingProjector<ProjectedSettings>
+{
+    public Task<object> ProjectAsync(ProjectedSettings group, CancellationToken ct = default)
+        => throw new InvalidOperationException("the translator is unavailable");
 }
 
 internal sealed class CountingProjector : ISettingProjector<ProjectedSettings>
