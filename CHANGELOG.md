@@ -120,15 +120,13 @@ This project follows [Semantic Versioning](https://semver.org/).
   explicitly. A library should not claim a framework type it does not own — in an application
   with two contexts it silently handed a bare `DbContext` dependency whichever one Settings was
   pointed at.
-- **The EF Core store takes a plain `DbContext`.** `EfCoreSettingStore` and `EfCoreAuditStore`
-  reach their entities through `Set<Setting>()` / `Set<SettingAuditEntry>()`, and
-  `UseEntityFrameworkCore<TContext>` no longer constrains `TContext` beyond `DbContext`. A
-  consuming context's whole settings registration is now one `ApplySettingsConfiguration` call
-  in `OnModelCreating` — no interface, no `DbSet` properties the library mostly never read.
-  `ISettingDbContext` is **obsolete** and does nothing; delete `: ISettingDbContext` and the two
-  `DbSet` properties from your context and nothing else changes. It will be removed in the next
-  release. `UseEntityFrameworkCore<TContext>` also registers `TContext` as the scoped
-  `DbContext`, which is what lets `.UseAuditStore<EfCoreAuditStore>()` go on resolving.
+- **The EF Core store takes a plain `DbContext`.** `EfCoreSettingStore` reaches its entities
+  through `Set<Setting>()`, and `UseEntityFrameworkCore<TContext>` no longer constrains
+  `TContext` beyond `DbContext`. A consuming context's whole settings registration is now one
+  `ApplySettingsConfiguration` call in `OnModelCreating` — no interface, no `DbSet` properties
+  the library never read. `ISettingDbContext` is **obsolete** and does nothing; delete
+  `: ISettingDbContext` and the two `DbSet` properties from your context and nothing else
+  changes. It will be removed in the next release.
 
 ### Fixed
 - **`SetAsync(selector, value)` could revert another writer's change to a different property.**
