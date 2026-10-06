@@ -19,9 +19,23 @@ namespace DotNetBoost.Settings.Core.Interfaces;
 /// <c>pattern</c>.
 /// </para>
 /// <para>
+/// <b>Several compose.</b> Every registered contributor whose <see cref="CanDescribe"/> returns
+/// true is consulted, and their constraints are merged per property — constraints are additive
+/// facts about a property, not a decision, so two contributors describing different aspects of
+/// one group is the normal case rather than a conflict. Register a second one to publish
+/// something this library cannot know about: a rule carried by an attribute from another
+/// package, for instance, alongside the validation rules the first contributor reads.
+/// </para>
+/// <para>
+/// On a collision — the same constraint name on the same property from two contributors — the
+/// first registered wins and the clash is logged at <c>Warning</c>. Resolving it quietly would
+/// make the published schema depend on registration order.
+/// </para>
+/// <para>
 /// Entirely optional. With no contributor registered the schema endpoint simply reports no
 /// constraints, and publishing a constraint changes nothing about enforcement — the validator
-/// is still what rejects a bad write.
+/// is still what rejects a bad write. A contributor that throws costs its own constraints and
+/// not the endpoint, nor the other contributors' constraints.
 /// </para>
 /// </remarks>
 public interface ISettingSchemaContributor

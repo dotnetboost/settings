@@ -109,10 +109,36 @@ Keys are property names as spelled on the class. Constraint names are convention
 closed — `required`, `min`, `max`, `exclusiveMin`, `exclusiveMax`, `minLength`, `maxLength`,
 `pattern` — so you can describe a rule this library has never heard of.
 
-First registered contributor that returns `true` from `CanDescribe` wins, as with
-`ISettingValidator`. With none registered, every property reports `constraints: null` and the
-endpoint is otherwise unchanged. A contributor that throws costs the constraints, not the
-response.
+### Several contributors compose
+
+**Every** contributor whose `CanDescribe` returns `true` is consulted, and their constraints are
+merged per property. Constraints are additive facts about a property, not a decision, so
+describing different aspects of one group is the normal case — one contributor publishing the
+FluentValidation rules while another publishes something this library cannot know about, such as
+a rule carried by an attribute from a different package:
+
+```csharp
+builder.Services.AddSettings()
+    .UseFluentValidation(assembly)   // min, max, pattern, required
+    .Build();
+
+builder.Services.AddSingleton<ISettingSchemaContributor, MultiLingualContributor>();  // translated
+```
+
+Both survive; neither deletes the other.
+
+(This is deliberately unlike `ISettingValidator`, where the first match wins. Running two
+validators over one property risks rejecting or reporting a value twice — but there is nothing
+wrong with two contributors each naming a different fact about it.)
+
+On a collision — the same constraint name on the same property from two contributors — **the
+first registered wins** and the clash is logged at `Warning`, naming both contributors, the
+group, the property and the constraint. Resolving it quietly would make the published schema
+depend on registration order.
+
+With none registered, every property reports `constraints: null` and the endpoint is otherwise
+unchanged. A contributor that throws costs its own constraints — not the response, and not the
+other contributors' constraints.
 
 > **Publishing a constraint changes nothing about enforcement.** The validator is still what
 > rejects a bad write. The schema exists so a client can show the same bounds the server will

@@ -166,27 +166,124 @@ public static class SettingsMinimalApiExtensions
     }
 
     /// <summary>
-    /// Constraints for a group, from the first registered contributor that can describe it.
-    /// First match wins, as it does for <c>ISettingValidator</c>.
+    /// Constraints for a group, merged across every registered contributor that can describe it.
+    /// <para>
+    /// Every applicable contributor is consulted, not just the first. Constraints are additive
+    /// facts about a property rather than a decision, so two contributors describing different
+    /// aspects of one group is the normal case: one publishing the validation rules, another
+    /// publishing something this library cannot know about — an attribute belonging to a
+    /// different package, say. First-match-wins would make registering the second silently
+    /// delete the first's constraints, and which one survived would depend on registration
+    /// order. That is deliberately unlike <c>ISettingValidator</c>, where first-match is right
+    /// because running two validators over one property risks rejecting or reporting it twice.
+    /// </para>
+    /// <para>
+    /// Merging is two levels deep: property name, then constraint name. On a collision — the
+    /// same constraint on the same property from two contributors — the first registered wins
+    /// and the clash is logged, because the alternative is an answer that depends on
+    /// registration order.
+    /// </para>
     /// </summary>
     private static IReadOnlyDictionary<string, IReadOnlyDictionary<string, object?>> DescribeConstraints(
         IServiceProvider sp, Type type)
     {
-        var contributor = sp.GetServices<ISettingSchemaContributor>().FirstOrDefault(c => c.CanDescribe(type));
-        if (contributor is null) return EmptyConstraints;
+        // Split into first and rest so the common case — exactly one contributor — hands back
+        // its own dictionary with nothing merged and nothing allocated.
+        ISettingSchemaContributor? first = null;
+        List<ISettingSchemaContributor>? rest = null;
 
-        // A contributor is third-party code reflecting over validation rules. A schema is a
-        // convenience, so one that cannot describe itself should cost the constraints, not
-        // the endpoint.
-        try   { return contributor.Describe(type) ?? EmptyConstraints; }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        foreach (var candidate in sp.GetServices<ISettingSchemaContributor>())
         {
-            if (sp.GetService<ILoggerFactory>()?.CreateLogger(LoggerCategory) is { } logger)
-                LogContributorFailed(logger, contributor.GetType().Name, type.Name, ex);
+            if (!candidate.CanDescribe(type)) continue;
 
-            return EmptyConstraints;
+            if (first is null) first = candidate;
+            else (rest ??= []).Add(candidate);
+        }
+
+        if (first is null) return EmptyConstraints;
+        if (rest is null) return SafeDescribe(first, type, sp) ?? EmptyConstraints;
+
+        var merged = new Dictionary<string, Dictionary<string, Claim>>(StringComparer.Ordinal);
+
+        Merge(first, type, sp, merged);
+        foreach (var contributor in rest) Merge(contributor, type, sp, merged);
+
+        return merged.ToDictionary(
+            entry => entry.Key,
+            entry => (IReadOnlyDictionary<string, object?>)entry.Value.ToDictionary(
+                constraint => constraint.Key,
+                constraint => constraint.Value.Value,
+                StringComparer.Ordinal),
+            StringComparer.Ordinal);
+    }
+
+    /// <summary>
+    /// Folds one contributor's constraints into <paramref name="merged"/>, keeping the first
+    /// claim on any property/constraint pair and logging the loser.
+    /// </summary>
+    private static void Merge(
+        ISettingSchemaContributor contributor,
+        Type type,
+        IServiceProvider sp,
+        Dictionary<string, Dictionary<string, Claim>> merged)
+    {
+        var described = SafeDescribe(contributor, type, sp);
+        if (described is null) return;
+
+        var owner = contributor.GetType().Name;
+
+        foreach (var (propertyName, constraints) in described)
+        {
+            if (constraints is null) continue;
+
+            if (!merged.TryGetValue(propertyName, out var target))
+                merged[propertyName] = target = new Dictionary<string, Claim>(StringComparer.Ordinal);
+
+            foreach (var (constraintName, value) in constraints)
+            {
+                if (target.TryGetValue(constraintName, out var existing))
+                {
+                    // Logged rather than resolved quietly: two contributors disagreeing about
+                    // the same constraint is a configuration problem, and silently taking
+                    // either one makes the published schema depend on registration order.
+                    if (Logger(sp) is { } logger)
+                        LogConstraintClash(logger, existing.Owner, owner, type.Name, propertyName, constraintName, null);
+
+                    continue;
+                }
+
+                target[constraintName] = new Claim(value, owner);
+            }
         }
     }
+
+    /// <summary>
+    /// One contributor's constraints, or <c>null</c> when it failed.
+    /// <para>
+    /// A contributor is third-party code reflecting over validation rules, and a schema is a
+    /// convenience, so one that cannot describe itself costs its own constraints and not the
+    /// endpoint. Wrapped per contributor rather than around the whole loop: with several
+    /// registered, one failing must not cost the others theirs.
+    /// </para>
+    /// </summary>
+    private static IReadOnlyDictionary<string, IReadOnlyDictionary<string, object?>>? SafeDescribe(
+        ISettingSchemaContributor contributor, Type type, IServiceProvider sp)
+    {
+        try   { return contributor.Describe(type); }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            if (Logger(sp) is { } logger)
+                LogContributorFailed(logger, contributor.GetType().Name, type.Name, ex);
+
+            return null;
+        }
+    }
+
+    /// <summary>A constraint value and the contributor that claimed it, for the clash message.</summary>
+    private readonly record struct Claim(object? Value, string Owner);
+
+    private static ILogger? Logger(IServiceProvider sp)
+        => sp.GetService<ILoggerFactory>()?.CreateLogger(LoggerCategory);
 
     private static readonly IReadOnlyDictionary<string, IReadOnlyDictionary<string, object?>> EmptyConstraints
         = new Dictionary<string, IReadOnlyDictionary<string, object?>>();
@@ -197,6 +294,14 @@ public static class SettingsMinimalApiExtensions
         LoggerMessage.Define<string, string>(
             LogLevel.Warning, new EventId(1200, nameof(LogContributorFailed)),
             "Schema contributor {Contributor} failed for settings group {Group}; reporting no constraints.");
+
+    private static readonly Action<ILogger, string, string, string, string, string, Exception?> LogConstraintClash =
+        LoggerMessage.Define<string, string, string, string, string>(
+            LogLevel.Warning, new EventId(1201, nameof(LogConstraintClash)),
+            // Each placeholder appears once and in the order the arguments are passed:
+            // LoggerMessage.Define binds them positionally, not by name.
+            "Schema contributors {Winner} and {Loser} both describe {Group}.{Property}'s " +
+            "'{Constraint}' constraint; keeping the first registered.");
 
     private static void RegisterGet(RouteGroupBuilder group, Type type)
     {

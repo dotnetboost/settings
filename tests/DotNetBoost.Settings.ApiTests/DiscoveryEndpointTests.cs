@@ -247,6 +247,103 @@ public class DiscoveryEndpointTests
         Assert.Equal(JsonValueKind.Null, properties["port"].GetProperty("constraints").ValueKind);
     }
 
+    /// <summary>
+    /// The case this merge exists for. A consumer publishing something this library cannot
+    /// know about — a rule carried by an attribute from another package — must not silently
+    /// delete the validation rules by registering alongside them.
+    /// </summary>
+    [Fact]
+    public async Task Schema_MergesContributorsDescribingDifferentProperties()
+    {
+        await using var app = await TestApp.StartAsync(s =>
+        {
+            s.AddSingleton<ISettingSchemaContributor, StubSchemaContributor>();
+            s.AddSingleton<ISettingSchemaContributor>(_ => new TranslatedContributor(nameof(DescribedSettings.Host)));
+        });
+
+        var properties = await PropertiesOf(app, "api-described");
+
+        Assert.Equal(1, properties["port"].GetProperty("constraints").GetProperty("min").GetInt32());
+        Assert.True(properties["host"].GetProperty("constraints").GetProperty("translated").GetBoolean());
+    }
+
+    [Fact]
+    public async Task Schema_MergesContributorsDescribingTheSameProperty()
+    {
+        await using var app = await TestApp.StartAsync(s =>
+        {
+            s.AddSingleton<ISettingSchemaContributor, StubSchemaContributor>();
+            s.AddSingleton<ISettingSchemaContributor>(_ => new TranslatedContributor(nameof(DescribedSettings.Port)));
+        });
+
+        var port = (await PropertiesOf(app, "api-described"))["port"].GetProperty("constraints");
+
+        // Both contributors' constraints survive on the one property.
+        Assert.Equal(1,      port.GetProperty("min").GetInt32());
+        Assert.Equal(65_535, port.GetProperty("max").GetInt32());
+        Assert.True(port.GetProperty("translated").GetBoolean());
+    }
+
+    /// <summary>
+    /// Last-wins would make the published schema depend on registration order, which is the
+    /// defect being fixed — so the value is asserted, not merely that one of them landed.
+    /// </summary>
+    [Fact]
+    public async Task Schema_OnACollidingConstraint_KeepsTheFirstRegistered()
+    {
+        await using var app = await TestApp.StartAsync(s =>
+        {
+            s.AddSingleton<ISettingSchemaContributor, StubSchemaContributor>();   // min = 1
+            s.AddSingleton<ISettingSchemaContributor>(_ => new MinOverridingContributor(99));
+        });
+
+        var port = (await PropertiesOf(app, "api-described"))["port"].GetProperty("constraints");
+
+        Assert.Equal(1, port.GetProperty("min").GetInt32());
+
+        // The loser's other constraints still land — only the colliding key is dropped.
+        Assert.Equal(7, port.GetProperty("maxLength").GetInt32());
+    }
+
+    /// <summary>
+    /// The case that justifies wrapping each contributor rather than the loop: it is what
+    /// silently regresses if someone later hoists the try/catch outward.
+    /// </summary>
+    [Fact]
+    public async Task Schema_AContributorThatThrows_DoesNotCostTheOthersTheirConstraints()
+    {
+        await using var app = await TestApp.StartAsync(s =>
+        {
+            s.AddSingleton<ISettingSchemaContributor, ThrowingSchemaContributor>();
+            s.AddSingleton<ISettingSchemaContributor, StubSchemaContributor>();
+        });
+
+        var response = await app.Client.GetAsync("/api/settings/api-described/schema");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var port = (await PropertiesOf(app, "api-described"))["port"].GetProperty("constraints");
+        Assert.Equal(1,      port.GetProperty("min").GetInt32());
+        Assert.Equal(65_535, port.GetProperty("max").GetInt32());
+    }
+
+    [Fact]
+    public async Task Schema_DoesNotConsultAContributorThatCannotDescribeTheType()
+    {
+        var unrelated = new RecordingContributor(canDescribe: false);
+        var applies   = new RecordingContributor(canDescribe: true);
+
+        await using var app = await TestApp.StartAsync(s =>
+        {
+            s.AddSingleton<ISettingSchemaContributor>(_ => unrelated);
+            s.AddSingleton<ISettingSchemaContributor>(_ => applies);
+        });
+
+        await app.Client.GetAsync("/api/settings/api-described/schema");
+
+        Assert.Equal(0, unrelated.DescribeCalls);
+        Assert.True(applies.DescribeCalls > 0);
+    }
+
     private static JsonElement Find(List<JsonElement> groups, string route)
         => groups.Single(g => g.GetProperty("route").GetString() == route);
 
@@ -271,6 +368,50 @@ public class DiscoveryEndpointTests
                     ["max"] = 65_535
                 }
             };
+    }
+
+    /// <summary>
+    /// Stands in for a contributor from another package: it publishes a constraint
+    /// DotNetBoost.Settings has never heard of, which is what this port exists for.
+    /// </summary>
+    private sealed class TranslatedContributor(string propertyName) : ISettingSchemaContributor
+    {
+        public bool CanDescribe(Type type) => type == typeof(DescribedSettings);
+
+        public IReadOnlyDictionary<string, IReadOnlyDictionary<string, object?>> Describe(Type type)
+            => new Dictionary<string, IReadOnlyDictionary<string, object?>>
+            {
+                [propertyName] = new Dictionary<string, object?> { ["translated"] = true }
+            };
+    }
+
+    /// <summary>Collides with <see cref="StubSchemaContributor"/> on <c>min</c>, and only on that.</summary>
+    private sealed class MinOverridingContributor(int min) : ISettingSchemaContributor
+    {
+        public bool CanDescribe(Type type) => type == typeof(DescribedSettings);
+
+        public IReadOnlyDictionary<string, IReadOnlyDictionary<string, object?>> Describe(Type type)
+            => new Dictionary<string, IReadOnlyDictionary<string, object?>>
+            {
+                [nameof(DescribedSettings.Port)] = new Dictionary<string, object?>
+                {
+                    ["min"]       = min,
+                    ["maxLength"] = 7
+                }
+            };
+    }
+
+    private sealed class RecordingContributor(bool canDescribe) : ISettingSchemaContributor
+    {
+        public int DescribeCalls { get; private set; }
+
+        public bool CanDescribe(Type type) => canDescribe;
+
+        public IReadOnlyDictionary<string, IReadOnlyDictionary<string, object?>> Describe(Type type)
+        {
+            DescribeCalls++;
+            return new Dictionary<string, IReadOnlyDictionary<string, object?>>();
+        }
     }
 
     private sealed class ThrowingSchemaContributor : ISettingSchemaContributor

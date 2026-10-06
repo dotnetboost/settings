@@ -65,11 +65,21 @@ public class FluentValidationSchemaContributorTests
         Assert.Empty(contributor.Describe(typeof(UnvalidatedSettings)));
     }
 
+    /// <summary>
+    /// <c>Single()</c> is about this one registration being idempotent — one contributor covers
+    /// every settings type, so <c>UseFluentValidation</c> registers it once however many
+    /// validators it finds, and twice over is still once. It says nothing about how many
+    /// contributors an application may have: the schema endpoint merges every applicable one.
+    /// </summary>
     [Fact]
-    public void UseFluentValidation_RegistersTheContributor()
+    public void UseFluentValidation_RegistersExactlyOneContributor_HoweverOftenItIsCalled()
     {
         var services = new ServiceCollection();
-        services.AddSettings().UseFluentValidation(typeof(FormSettingsValidator).Assembly);
+        var assembly = typeof(FormSettingsValidator).Assembly;
+
+        services.AddSettings()
+            .UseFluentValidation(assembly)
+            .UseFluentValidation(assembly);
 
         var contributor = services.BuildServiceProvider().GetServices<ISettingSchemaContributor>().Single();
 
