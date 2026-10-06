@@ -5,6 +5,7 @@ using DotNetBoost.Settings.Core.Attributes;
 using DotNetBoost.Settings.Core.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Routing;
+using FluentValidation;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace DotNetBoost.Settings.ApiTests;
@@ -344,6 +345,85 @@ public class DiscoveryEndpointTests
         Assert.True(applies.DescribeCalls > 0);
     }
 
+    // ---------------------------------------------------------------- UseSchemaContributor
+
+    [Fact]
+    public async Task UseSchemaContributor_PublishesItsConstraints()
+    {
+        await using var app = await TestApp.StartAsync(
+            configureSettings: b => b.UseSchemaContributor<StubSchemaContributor>());
+
+        var port = (await PropertiesOf(app, "api-described"))["port"].GetProperty("constraints");
+
+        Assert.Equal(1,      port.GetProperty("min").GetInt32());
+        Assert.Equal(65_535, port.GetProperty("max").GetInt32());
+    }
+
+    /// <summary>
+    /// The case that breaks if someone reaches for <c>TryAddSingleton</c> instead of
+    /// <c>TryAddEnumerable</c>: the second registration would be dropped and its constraints
+    /// would vanish.
+    /// </summary>
+    [Fact]
+    public async Task UseSchemaContributor_RegistersEveryDistinctType()
+    {
+        await using var app = await TestApp.StartAsync(configureSettings: b => b
+            .UseSchemaContributor<StubSchemaContributor>()
+            .UseSchemaContributor<HostTranslatedContributor>());
+
+        var properties = await PropertiesOf(app, "api-described");
+
+        Assert.Equal(1, properties["port"].GetProperty("constraints").GetProperty("min").GetInt32());
+        Assert.True(properties["host"].GetProperty("constraints").GetProperty("translated").GetBoolean());
+    }
+
+    /// <summary>
+    /// A contributor only describes, so registering one twice would describe the group twice —
+    /// and the merge would read the second pass as a collision with itself, logging a clash
+    /// that names the same contributor on both sides.
+    /// </summary>
+    [Fact]
+    public async Task UseSchemaContributor_RegisteringOneTypeTwice_RegistersItOnce()
+    {
+        await using var app = await TestApp.StartAsync(configureSettings: b => b
+            .UseSchemaContributor<StubSchemaContributor>()
+            .UseSchemaContributor<StubSchemaContributor>());
+
+        var port = (await PropertiesOf(app, "api-described"))["port"].GetProperty("constraints");
+
+        Assert.Equal(1, port.GetProperty("min").GetInt32());
+        Assert.DoesNotContain(app.Warnings, w => w.Contains("both describe", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task UseSchemaContributor_ComposesWithUseFluentValidation()
+    {
+        await using var app = await TestApp.StartAsync(configureSettings: b => b
+            .UseFluentValidation(typeof(DescribedSettingsValidator).Assembly)
+            .UseSchemaContributor<HostTranslatedContributor>());
+
+        var properties = await PropertiesOf(app, "api-described");
+        var host       = properties["host"].GetProperty("constraints");
+
+        // The validator's bounds...
+        Assert.Equal(3,   host.GetProperty("minLength").GetInt32());
+        Assert.Equal(255, host.GetProperty("maxLength").GetInt32());
+
+        // ...and the extra contributor's, on the same property.
+        Assert.True(host.GetProperty("translated").GetBoolean());
+    }
+
+    [Fact]
+    public async Task UseSchemaContributor_FactoryOverload_RegistersWhatTheFactoryReturns()
+    {
+        await using var app = await TestApp.StartAsync(configureSettings: b => b
+            .UseSchemaContributor(_ => new TranslatedContributor(nameof(DescribedSettings.UseSsl))));
+
+        var properties = await PropertiesOf(app, "api-described");
+
+        Assert.True(properties["useSsl"].GetProperty("constraints").GetProperty("translated").GetBoolean());
+    }
+
     private static JsonElement Find(List<JsonElement> groups, string route)
         => groups.Single(g => g.GetProperty("route").GetString() == route);
 
@@ -383,6 +463,17 @@ public class DiscoveryEndpointTests
             {
                 [propertyName] = new Dictionary<string, object?> { ["translated"] = true }
             };
+    }
+
+    /// <summary>A <see cref="TranslatedContributor"/> over Host, for the DI-constructed overload.</summary>
+    private sealed class HostTranslatedContributor : ISettingSchemaContributor
+    {
+        private readonly TranslatedContributor _inner = new(nameof(DescribedSettings.Host));
+
+        public bool CanDescribe(Type type) => _inner.CanDescribe(type);
+
+        public IReadOnlyDictionary<string, IReadOnlyDictionary<string, object?>> Describe(Type type)
+            => _inner.Describe(type);
     }
 
     /// <summary>Collides with <see cref="StubSchemaContributor"/> on <c>min</c>, and only on that.</summary>
@@ -443,4 +534,13 @@ public class DescribedSettings
 public class SecuredSettings
 {
     public string Host { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// Gives <c>UseFluentValidation</c> rules to publish for <see cref="DescribedSettings"/>, so the
+/// composition test is about two real contributors rather than one and a stub.
+/// </summary>
+public sealed class DescribedSettingsValidator : AbstractValidator<DescribedSettings>
+{
+    public DescribedSettingsValidator() => RuleFor(x => x.Host).Length(3, 255);
 }

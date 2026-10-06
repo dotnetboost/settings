@@ -56,6 +56,17 @@ This project follows [Semantic Versioning](https://semver.org/).
   sits inside its group, so it is covered by the group's `[Authorize]` exactly as `GET` and
   `POST` are. Both are on by default; pass `includeDiscovery: false` to `MapSettingsEndpoints`
   to leave them out.
+- **`.UseSchemaContributor<TContributor>()`**, with a factory overload — `ISettingSchemaContributor`
+  was the only port on `SettingBuilder` without a builder method, which nobody noticed because
+  `DotNetBoost.Settings.FluentValidation` registers its own internally. A consumer publishing a
+  constraint of its own had to drop out of the `AddSettings()` chain and call
+  `AddSingleton<ISettingSchemaContributor, T>()` by hand.
+  It **composes rather than replaces**: registering one adds to whatever `UseFluentValidation`
+  already publishes, which is only true as of the merge change in this same release. One type
+  registers once however often it is called — a contributor only describes, so a duplicate would
+  describe a group twice and read as a collision with itself — unlike `UseWriteObserver<T>()`,
+  where two registrations are two observers. Registration order decides which value survives a
+  collision, and the XML doc says so.
 - **`ISettingSchemaContributor`**, implemented over FluentValidation's own descriptor and
   registered by the existing `UseFluentValidation(assembly)` call, so the schema publishes the
   bounds your validators already enforce. `ISettingValidator` could not supply these: it answers

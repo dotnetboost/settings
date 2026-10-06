@@ -167,6 +167,74 @@ namespace Microsoft.Extensions.DependencyInjection
         }
     }
 
+    /// <summary>Builder methods for the schema-constraint hook.</summary>
+    public static class SchemaContributorBuilderExtensions
+    {
+        /// <summary>
+        /// Registers a contributor that publishes validation constraints through
+        /// <c>GET /api/settings/{route}/schema</c>, so a generated form can show the bounds the
+        /// server will apply instead of hardcoding its own.
+        /// <para>
+        /// Contributors <b>compose</b>: every registered type whose <c>CanDescribe</c> returns
+        /// true is consulted and their constraints merged, so this adds to whatever
+        /// <c>UseFluentValidation</c> already publishes rather than replacing it. Register one
+        /// to describe something this library cannot know about — a rule carried by an
+        /// attribute belonging to another package, say.
+        /// </para>
+        /// <para>
+        /// <b>Order matters on a collision.</b> When two contributors set the same constraint
+        /// name on the same property, the first <em>registered</em> wins and the clash is
+        /// logged at <c>Warning</c>. Putting this call before or after
+        /// <c>UseFluentValidation()</c> is therefore a choice about which one's value survives.
+        /// </para>
+        /// </summary>
+        /// <remarks>
+        /// Registering the same <typeparamref name="TContributor"/> twice registers it once:
+        /// a contributor only describes, so a duplicate would describe the same group twice
+        /// and read as a collision with itself. That is deliberately unlike
+        /// <see cref="WriteObserverBuilderExtensions.UseWriteObserver{TObserver}"/>, where two
+        /// registrations of one observer are two observers — because an observer <em>does</em>
+        /// something.
+        /// </remarks>
+        public static SettingBuilder UseSchemaContributor<TContributor>(this SettingBuilder builder)
+            where TContributor : class, ISettingSchemaContributor
+        {
+            ArgumentNullException.ThrowIfNull(builder);
+
+            // TryAddEnumerable with a type descriptor: several *different* contributor types
+            // all register, which is the point, while a repeat of one type is deduped.
+            // Transient to match the contributor DotNetBoost.Settings.FluentValidation
+            // registers, so the two are indistinguishable to a reader.
+            builder.Services.TryAddEnumerable(
+                ServiceDescriptor.Transient<ISettingSchemaContributor, TContributor>());
+
+            return builder;
+        }
+
+        /// <summary>
+        /// Registers a contributor built by <paramref name="factory"/>, for one needing
+        /// something DI cannot construct it with — which a schema contributor often does, since
+        /// its whole purpose is describing rules this library does not own.
+        /// <para>
+        /// See <see cref="UseSchemaContributor{TContributor}(SettingBuilder)"/> for how
+        /// contributors compose and which registration wins a collision.
+        /// </para>
+        /// </summary>
+        public static SettingBuilder UseSchemaContributor<TContributor>(
+            this SettingBuilder builder, Func<IServiceProvider, TContributor> factory)
+            where TContributor : class, ISettingSchemaContributor
+        {
+            ArgumentNullException.ThrowIfNull(builder);
+            ArgumentNullException.ThrowIfNull(factory);
+
+            // Plain Add, not TryAddEnumerable: two factories are not comparable by
+            // implementation type, so deduping would silently drop one of them.
+            builder.Services.Add(ServiceDescriptor.Transient<ISettingSchemaContributor>(factory));
+
+            return builder;
+        }
+    }
+
     /// <summary>Builder methods for propagating writes between application instances.</summary>
     public static class ChangeSignalBuilderExtensions
     {
