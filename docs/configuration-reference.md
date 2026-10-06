@@ -21,7 +21,8 @@
 | `.UseHttpContextActor()` | API | Take the actor from the signed-in user of the request |
 | `.OnChanged<TSettings, THandler>()` | Core | Register a runtime change handler |
 | `.UseProjector<TSettings, TProjector>()` | Core (applied by API) | Reshape a group for `GET` only; never touches the `ETag` |
-| `.UseFluentValidation(assembly)` | FluentValidation | Register validators |
+| `.UseFluentValidation(assembly)` | FluentValidation | Register validators, and publish their rules in the schema |
+| `.UseSchemaContributor<TContributor>()` | Core | Publish extra schema constraints; composes with any already registered |
 | `.Build()` | Core | Validate configuration, return `IServiceCollection` |
 
 ## `MapSettingsEndpoints()` parameters

@@ -119,13 +119,20 @@ a rule carried by an attribute from a different package:
 
 ```csharp
 builder.Services.AddSettings()
-    .UseFluentValidation(assembly)   // min, max, pattern, required
+    .UseFluentValidation(assembly)                        // min, max, pattern, required
+    .UseSchemaContributor<MultiLingualContributor>()      // translated
     .Build();
-
-builder.Services.AddSingleton<ISettingSchemaContributor, MultiLingualContributor>();  // translated
 ```
 
 Both survive; neither deletes the other.
+
+`UseSchemaContributor<T>()` registers one type once however often it is called — a contributor
+only describes, so a duplicate would describe the same group twice and read as a collision with
+itself. That is unlike `UseWriteObserver<T>()`, where two registrations are two observers,
+because an observer *does* something. There is also a factory overload,
+`UseSchemaContributor(sp => new MyContributor(...))`, for a contributor needing something DI
+cannot construct it with — which is common here, since the whole point is describing rules this
+library does not own.
 
 (This is deliberately unlike `ISettingValidator`, where the first match wins. Running two
 validators over one property risks rejecting or reporting a value twice — but there is nothing
@@ -135,6 +142,10 @@ On a collision — the same constraint name on the same property from two contri
 first registered wins** and the clash is logged at `Warning`, naming both contributors, the
 group, the property and the constraint. Resolving it quietly would make the published schema
 depend on registration order.
+
+Registration order is the order of the builder calls, so putting `UseSchemaContributor<T>()`
+before or after `UseFluentValidation()` decides which one's value survives a clash. Above,
+`UseFluentValidation` comes first and so wins any constraint both describe.
 
 With none registered, every property reports `constraints: null` and the endpoint is otherwise
 unchanged. A contributor that throws costs its own constraints — not the response, and not the

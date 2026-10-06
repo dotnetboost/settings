@@ -9,8 +9,11 @@
   <ItemGroup>
     <ProjectReference Include="../../src/DotNetBoost.Settings.Core/DotNetBoost.Settings.Core.csproj" />
     <ProjectReference Include="../../src/DotNetBoost.Settings.API/DotNetBoost.Settings.API.csproj" />
+    <!-- So the schema tests can prove two real contributors compose, not one and a stub. -->
+    <ProjectReference Include="../../src/DotNetBoost.Settings.FluentValidation/DotNetBoost.Settings.FluentValidation.csproj" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="Microsoft.AspNetCore.TestHost" />
+    <PackageReference Include="FluentValidation" />
     <PackageReference Include="xunit" />
     <PackageReference Include="xunit.runner.visualstudio" />
     <PackageReference Include="coverlet.collector" />
