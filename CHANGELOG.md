@@ -114,6 +114,23 @@ This project follows [Semantic Versioning](https://semver.org/).
   type, which would surface much later as truncated settings.
 
 ### Changed
+- **The schema endpoint merges every applicable `ISettingSchemaContributor` instead of using the
+  first.** Constraints are additive facts about a property rather than a decision, so two
+  contributors describing different aspects of one group is the normal case — and first-match
+  meant registering a second one silently deleted the first's constraints, with the survivor
+  decided by registration order, which nothing documented or controlled. (The
+  `ISettingValidator` precedent the old behaviour cited does not transfer: first-match is right
+  for a validator, because running two over one property risks rejecting or reporting a value
+  twice.)
+  This is what lets a consumer publish a constraint this library cannot know about — a rule
+  carried by an attribute belonging to another package — *alongside* the validation rules,
+  rather than instead of them. Merging is two levels deep, property then constraint name. On a
+  collision the first registered wins and the clash is logged at `Warning`, naming both
+  contributors, the group, the property and the constraint; silently taking either would make
+  the schema depend on registration order. A contributor that throws still costs only its own
+  constraints, now also meaning it cannot cost the others theirs.
+  **Not breaking for anyone registering a single contributor**, which is every current caller —
+  including `UseFluentValidation`, which registers exactly one.
 - **Nothing is registered against `DbContext` any more.** `UseEntityFrameworkCore<TContext>` had
   been registering `TContext` as the scoped `DbContext` so `EfCoreAuditStore` could resolve; with
   the audit store gone nothing needs it, and the settings store is constructed from `TContext`
