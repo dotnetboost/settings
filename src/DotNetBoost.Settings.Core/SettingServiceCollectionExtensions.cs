@@ -165,6 +165,26 @@ namespace Microsoft.Extensions.DependencyInjection
             builder.Services.AddScoped<ISettingProjector<TSettings>, TProjector>();
             return builder;
         }
+
+        /// <summary>
+        /// Replaces whatever projector is registered for <typeparamref name="TSettings"/> with
+        /// <typeparamref name="TProjector"/>.
+        /// <para>
+        /// The deliberate-override path. A shared <c>AddMyCompanySettings()</c> that registers
+        /// a default projector needs a legible way to be overridden, and registering a second
+        /// one no longer works for that: <c>Build()</c> rejects two projectors for one group,
+        /// because the implicit last-wins it used to rely on was indistinguishable from the
+        /// mistake of registering two by accident.
+        /// </para>
+        /// </summary>
+        public static SettingBuilder ReplaceProjector<TSettings, TProjector>(this SettingBuilder builder)
+            where TSettings  : new()
+            where TProjector : class, ISettingProjector<TSettings>
+        {
+            ArgumentNullException.ThrowIfNull(builder);
+            builder.Services.Replace(ServiceDescriptor.Scoped<ISettingProjector<TSettings>, TProjector>());
+            return builder;
+        }
     }
 
     /// <summary>Builder methods for the schema-constraint hook.</summary>
