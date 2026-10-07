@@ -1,5 +1,6 @@
 using DotNetBoost.Settings.Core;
 using DotNetBoost.Settings.Core.Interfaces;
+using DotNetBoost.Settings.Core.Models;
 using DotNetBoost.Settings.Core.Services;
 using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -163,7 +164,7 @@ namespace Microsoft.Extensions.DependencyInjection
         {
             ArgumentNullException.ThrowIfNull(builder);
             builder.Services.AddScoped<ISettingProjector<TSettings>, TProjector>();
-            return builder;
+            return builder.DeclareProjection<TSettings, TProjector>();
         }
 
         /// <summary>
@@ -183,6 +184,50 @@ namespace Microsoft.Extensions.DependencyInjection
         {
             ArgumentNullException.ThrowIfNull(builder);
             builder.Services.Replace(ServiceDescriptor.Scoped<ISettingProjector<TSettings>, TProjector>());
+            return builder.DeclareProjection<TSettings, TProjector>();
+        }
+
+        /// <summary>
+        /// Records what <c>GET</c> returns for <typeparamref name="TSettings"/>, so the
+        /// generated endpoint can declare it: the projection when
+        /// <typeparamref name="TProjector"/> implements
+        /// <see cref="ISettingProjector{T, TProjection}"/>, otherwise the group itself.
+        /// </summary>
+        /// <remarks>
+        /// Every registration path writes the key, including the untyped case. That is what
+        /// stops a later <c>ReplaceProjector</c> leaving a stale projection type behind: the
+        /// last write wins, exactly as the projector registration it accompanies does.
+        /// </remarks>
+        private static SettingBuilder DeclareProjection<TSettings, TProjector>(this SettingBuilder builder)
+            where TSettings  : new()
+            where TProjector : class, ISettingProjector<TSettings>
+        {
+            var declared = typeof(TProjector).GetInterfaces()
+                .Where(i => i.IsGenericType
+                         && i.GetGenericTypeDefinition() == typeof(ISettingProjector<,>)
+                         && i.GetGenericArguments()[0] == typeof(TSettings))
+                .Select(i => i.GetGenericArguments()[1])
+                .ToList();
+
+            if (declared.Count > 1)
+            {
+                // The same ambiguity Build() guards for two projectors, caught at the call
+                // that causes it. Reported here rather than left to SingleOrDefault, whose
+                // "sequence contains more than one element" says nothing about projections.
+                throw new InvalidOperationException(
+                    $"{typeof(TProjector).Name} declares more than one projection type for " +
+                    $"{typeof(TSettings).Name}: {string.Join(", ", declared.Select(t => t.Name))}. " +
+                    "A group's GET has one response shape, so implement ISettingProjector<,> once.");
+            }
+
+            // The type argument is required: without it the call is ambiguous between
+            // AddKeyedSingleton(IServiceCollection, Type, object?) and
+            // AddKeyedSingleton<TService>(IServiceCollection, object?, TService), because a
+            // Type is also a valid key. Do not simplify it away.
+            builder.Services.AddKeyedSingleton<SettingProjectionDescriptor>(
+                typeof(TSettings),
+                new SettingProjectionDescriptor(declared.Count == 1 ? declared[0] : typeof(TSettings)));
+
             return builder;
         }
     }

@@ -56,6 +56,21 @@ This project follows [Semantic Versioning](https://semver.org/).
   sits inside its group, so it is covered by the group's `[Authorize]` exactly as `GET` and
   `POST` are. Both are on by default; pass `includeDiscovery: false` to `MapSettingsEndpoints`
   to leave them out.
+- **`ISettingProjector<T, TProjection>`** — a projector that names the type it returns, so the
+  generated `GET` advertises the projection instead of the stored group. The untyped interface
+  returns `object`, and the library could not do better on its own: a projector is resolved from
+  the request scope, long after the route was mapped, so `.Produces(200, …)` had no choice but
+  to name the group. The docs admitted it in prose and told you to patch the document yourself.
+  The type sits on the projector rather than as a third argument to `UseProjector`, so the
+  compiler checks it — a third generic argument would be a promise the author could get wrong,
+  and catching that would need a runtime check.
+  Opt-in and not a break: an existing `ISettingProjector<T>` keeps compiling, keeps returning
+  the same body, and keeps declaring the group. The typed interface adapts to the
+  object-returning member through a default interface member, so implementing it is all there
+  is to do. **This documents the response; it does not change it** — the body is byte for byte
+  what the untyped interface produced, and `POST` still accepts the stored group, because
+  advertising the projection as a request body would promise a write the API refuses.
+  Prerelease-cheap, and no change to the net8.0/net10.0 support matrix.
 - **`.UseSchemaContributor<TContributor>()`**, with a factory overload — `ISettingSchemaContributor`
   was the only port on `SettingBuilder` without a builder method, which nobody noticed because
   `DotNetBoost.Settings.FluentValidation` registers its own internally. A consumer publishing a

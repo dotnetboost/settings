@@ -5,6 +5,12 @@ namespace DotNetBoost.Settings.Core.Interfaces;
 /// <c>.UseProjector&lt;TSettings, TProjector&gt;()</c>; applied by <c>MapSettingsEndpoints</c>
 /// on GET.
 /// <para>
+/// Implement <see cref="ISettingProjector{T, TProjection}"/> instead to name the type you
+/// return, and GET's OpenAPI response will describe the projection rather than the stored
+/// group. This interface cannot: the projector is resolved per request, long after the route
+/// was mapped, so at map time nothing knows what a projection looks like.
+/// </para>
+/// <para>
 /// This is the hook for serving a group as something other than its stored values —
 /// translating a display name into the request's language, resolving an image id to a URL,
 /// masking a field for the UI — without the settings engine needing to know what any of
@@ -59,4 +65,45 @@ public interface ISettingProjector<T> where T : new()
     /// <param name="group">The settings group as stored. Treat it as read-only.</param>
     /// <param name="ct">Cancels the projection.</param>
     Task<object> ProjectAsync(T group, CancellationToken ct = default);
+}
+
+/// <summary>
+/// A projector that names the type it returns, so the generated <c>GET</c> can advertise it.
+/// </summary>
+/// <remarks>
+/// <para>
+/// <see cref="ISettingProjector{T}"/> returns <c>object</c>, which leaves the endpoint
+/// declaring the stored group as its 200 response — wrong for every projected group, and not
+/// something the library could fix on its own: a projector is resolved from the request scope,
+/// long after the route was mapped. Declaring <typeparamref name="TProjection"/> here puts
+/// the answer somewhere the compiler checks it, which a third generic argument on
+/// <c>UseProjector</c> would not.
+/// </para>
+/// <para>
+/// Everything in <see cref="ISettingProjector{T}"/> still holds — read path only, never
+/// applied to the ETag, and a projector that throws fails the request. This changes the
+/// documentation of the response, not the response: the body is byte for byte what the
+/// untyped interface produces, and <c>POST</c> still accepts the stored group, because
+/// advertising the projection as a request body would promise a write the API refuses.
+/// </para>
+/// </remarks>
+/// <typeparam name="T">The settings group this projector shapes.</typeparam>
+/// <typeparam name="TProjection">What <c>GET</c> returns in its place.</typeparam>
+public interface ISettingProjector<T, TProjection> : ISettingProjector<T>
+    where T : new()
+    where TProjection : class
+{
+    /// <summary>
+    /// Returns what GET should serialise in place of <paramref name="group"/>.
+    /// </summary>
+    /// <param name="group">The settings group as stored. Treat it as read-only.</param>
+    /// <param name="ct">Cancels the projection.</param>
+    new Task<TProjection> ProjectAsync(T group, CancellationToken ct = default);
+
+    /// <summary>
+    /// Adapts to the object-returning member the generated endpoint calls, so implementing
+    /// the typed interface is all an author has to do.
+    /// </summary>
+    async Task<object> ISettingProjector<T>.ProjectAsync(T group, CancellationToken ct)
+        => await ProjectAsync(group, ct).ConfigureAwait(false);
 }

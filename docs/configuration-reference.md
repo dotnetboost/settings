@@ -20,7 +20,7 @@
 | `.UseActorAccessor<TAccessor>()` | Core | Supply who is making the change |
 | `.UseHttpContextActor()` | API | Take the actor from the signed-in user of the request |
 | `.OnChanged<TSettings, THandler>()` | Core | Register a runtime change handler |
-| `.UseProjector<TSettings, TProjector>()` | Core (applied by API) | Reshape a group for `GET` only; never touches the `ETag`. One per group |
+| `.UseProjector<TSettings, TProjector>()` | Core (applied by API) | Reshape a group for `GET` only; never touches the `ETag`. One per group, and declares `GET`'s response type when the projector is typed |
 | `.ReplaceProjector<TSettings, TProjector>()` | Core | Override a projector a shared registration already set |
 | `.UseFluentValidation(assembly)` | FluentValidation | Register validators, and publish their rules in the schema |
 | `.UseSchemaContributor<TContributor>()` | Core | Publish extra schema constraints; composes with any already registered |

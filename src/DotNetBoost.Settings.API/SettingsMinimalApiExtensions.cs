@@ -2,6 +2,7 @@ using DotNetBoost.Settings.API;
 using DotNetBoost.Settings.Core;
 using DotNetBoost.Settings.Core.Attributes;
 using DotNetBoost.Settings.Core.Interfaces;
+using DotNetBoost.Settings.Core.Models;
 using Microsoft.Extensions.Logging;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Builder;
@@ -93,7 +94,13 @@ public static class SettingsMinimalApiExtensions
             if (auth is not null)
                 group.RequireAuthorization(auth);
 
-            RegisterGet(group, type);
+            // One resolve per group at map time. A projector itself is scoped and cannot be
+            // resolved here, which is exactly why the response type has to be declared
+            // separately rather than discovered from the projector.
+            var declared = endpoints.ServiceProvider
+                .GetKeyedService<SettingProjectionDescriptor>(type)?.Projection;
+
+            RegisterGet(group, type, declared);
             RegisterPost(group, type, requireIfMatch);
 
             // Inside the same group, so it inherits the RequireAuthorization above: a group's
@@ -303,7 +310,7 @@ public static class SettingsMinimalApiExtensions
             "Schema contributors {Winner} and {Loser} both describe {Group}.{Property}'s " +
             "'{Constraint}' constraint; keeping the first registered.");
 
-    private static void RegisterGet(RouteGroupBuilder group, Type type)
+    private static void RegisterGet(RouteGroupBuilder group, Type type, Type? declared)
     {
         group.MapGet("/", async (HttpContext ctx, ISettingManager manager, CancellationToken ct) =>
         {
@@ -337,7 +344,11 @@ public static class SettingsMinimalApiExtensions
         })
         .WithName($"Get{type.Name}")
         .WithSummary($"Returns the current {type.Name} settings.")
-        .Produces(200, type);
+
+        // The projection when a typed projector declared one, otherwise the stored group.
+        // POST below keeps accepting the group either way: advertising the projection as a
+        // request body would promise a write the API refuses.
+        .Produces(200, declared ?? type);
     }
 
     private static void RegisterPost(RouteGroupBuilder group, Type type, bool requireIfMatch)

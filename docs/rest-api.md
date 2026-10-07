@@ -73,8 +73,34 @@ Four rules make this safe to have:
   response must not be hidden.
 
 Programmatic reads are unaffected: `For<T>().GetAsync()` always returns the stored group.
-Note that the OpenAPI schema for `GET` still describes `T` — the document cannot know what your
-projector returns, so describe the projected shape yourself if the generated document matters.
+
+### Letting the document describe the projection
+
+`ISettingProjector<T>` returns `object`, so `GET` can only declare the stored group as its 200
+response — wrong for every projected group. Name the type instead, and the generated document
+describes it:
+
+```csharp
+public sealed record BrandingView(string StoreName, string PrimaryColor);
+
+public sealed class BrandingProjector(ITranslator translator)
+    : ISettingProjector<BrandingSettings, BrandingView>
+{
+    public async Task<BrandingView> ProjectAsync(BrandingSettings group, CancellationToken ct = default)
+        => new(await translator.ForCurrentRequestAsync(group.StoreName, ct), group.PrimaryColor);
+}
+```
+
+Registration is unchanged — `.UseProjector<BrandingSettings, BrandingProjector>()` — and so is
+the response body. This documents what you already return; it does not change it.
+
+The type goes on the projector rather than as a third argument to `UseProjector` so the compiler
+checks it. A `UseProjector<TSettings, TProjector, TProjection>()` would be a promise the author
+could get wrong, and catching that would need a runtime check.
+
+`ISettingProjector<T>` keeps working and keeps declaring the group, so nothing has to change.
+`POST` still accepts the stored group either way: advertising the projection as a request body
+would promise a write the API refuses.
 
 ## Securing the endpoints
 
