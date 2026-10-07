@@ -59,10 +59,6 @@ public class EfCoreModelConfigurationTests
         Assert.Equal(ValueColumnTypeOf(ContextFor(provider)), ValueColumnTypeOf(ObsoleteContextFor(provider)));
     }
 
-    [Fact]
-    public void TheObsoleteInferringOverload_StillReadsTheEngineOffTheContext()
-        => Assert.Equal("TEXT", ValueColumnTypeOf(new ObsoleteInferredContext()));
-
     /// <summary>EF wraps a throw from OnModelCreating, so assert over the whole chain.</summary>
     private static string Flatten(Exception ex)
     {
@@ -131,11 +127,6 @@ public class EfCoreModelConfigurationTests
     };
 
 #pragma warning disable CS0618 // Deliberately calling the obsolete alias.
-    private sealed class ObsoleteInferredContext : SqliteBackedContext
-    {
-        protected override void OnModelCreating(ModelBuilder mb) => mb.ApplySettingsConfiguration(this);
-    }
-
     private sealed class ObsoleteSqlServerContext : SqliteBackedContext
     {
         protected override void OnModelCreating(ModelBuilder mb)

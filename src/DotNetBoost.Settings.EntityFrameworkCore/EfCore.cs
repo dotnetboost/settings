@@ -134,14 +134,6 @@ public static class ModelBuilderExtensions
     public static ModelBuilder ApplySettingsConfiguration(this ModelBuilder mb, DatabaseProvider provider)
         => mb.ApplySettings(provider);
 
-    /// <summary>
-    /// Renamed to <see cref="ApplySettings(ModelBuilder, DbContext)"/>.
-    /// </summary>
-    /// <inheritdoc cref="ApplySettingsConfiguration(ModelBuilder, DatabaseProvider)" path="/remarks"/>
-    [Obsolete(RenamedMessage)]
-    public static ModelBuilder ApplySettingsConfiguration(this ModelBuilder mb, DbContext context)
-        => mb.ApplySettings(context);
-
     private const string RenamedMessage =
         "Renamed to ApplySettings, to match ApplyMedia and ApplyMultiLingual. " +
         "This alias will be removed in the next release.";
