@@ -91,7 +91,7 @@ public class MailSettings
 public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(options)
 {
     protected override void OnModelCreating(ModelBuilder modelBuilder)
-        => modelBuilder.ApplySettingsConfiguration(this);
+        => modelBuilder.ApplySettings(this);
 }
 ```
 

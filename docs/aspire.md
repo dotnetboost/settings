@@ -61,7 +61,7 @@ written out in full and commented, so switching is four edits and no new code:
 
 The available blocks are PostgreSQL (EF Core, active), SQL Server (EF Core), SQLite (EF Core, no
 container), MongoDB, and Dapper on PostgreSQL. For the EF Core ones, also flip the
-`DatabaseProvider` passed to `ApplySettingsConfiguration` in `samples/SampleApp/AppDbContext.cs` —
+`DatabaseProvider` passed to `ApplySettings` in `samples/SampleApp/AppDbContext.cs` —
 it decides the column type used for `Value` and how `RowVersion` is mapped.
 
 ## The Redis cache

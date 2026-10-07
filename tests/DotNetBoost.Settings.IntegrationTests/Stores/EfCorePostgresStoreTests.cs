@@ -13,7 +13,7 @@ namespace DotNetBoost.Settings.IntegrationTests.Stores;
 public sealed class PostgresDbContext(DbContextOptions<PostgresDbContext> options) : DbContext(options)
 {
     protected override void OnModelCreating(ModelBuilder modelBuilder)
-        => modelBuilder.ApplySettingsConfiguration(this);
+        => modelBuilder.ApplySettings(this);
 }
 
 /// <summary>

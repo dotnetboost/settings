@@ -14,7 +14,7 @@ namespace DotNetBoost.Settings.IntegrationTests.Stores;
 public sealed class SqlServerDbContext(DbContextOptions<SqlServerDbContext> options) : DbContext(options)
 {
     protected override void OnModelCreating(ModelBuilder modelBuilder)
-        => modelBuilder.ApplySettingsConfiguration(this);
+        => modelBuilder.ApplySettings(this);
 }
 
 /// <summary>

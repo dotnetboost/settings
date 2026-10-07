@@ -13,9 +13,9 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     // the provider block in Program.cs needs no matching edit here.
     //
     // To pin the engine instead (a model built against one and migrated onto another):
-    // => modelBuilder.ApplySettingsConfiguration(DatabaseProvider.PostgreSql);
+    // => modelBuilder.ApplySettings(DatabaseProvider.PostgreSql);
     protected override void OnModelCreating(ModelBuilder modelBuilder)
-        => modelBuilder.ApplySettingsConfiguration(this);
+        => modelBuilder.ApplySettings(this);
 }
 
 /// <summary>
