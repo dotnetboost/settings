@@ -24,8 +24,8 @@ public enum DatabaseProvider
 /// <summary>
 /// No longer required. The EF Core store reads its entities through
 /// <see cref="DbContext.Set{TEntity}()"/>, so a context needs neither this interface nor the
-/// <c>DbSet</c> properties it declares — <c>ApplySettingsConfiguration</c> in
-/// <c>OnModelCreating</c> is the whole registration.
+/// <c>DbSet</c> properties it declares — <c>ApplySettings</c> in <c>OnModelCreating</c> is the
+/// whole registration.
 /// </summary>
 /// <remarks>
 /// Kept for one release so existing contexts keep compiling. Delete the
@@ -91,7 +91,7 @@ public static class ModelBuilderExtensions
     /// </summary>
     /// <param name="mb">The model builder.</param>
     /// <param name="provider">The engine being targeted.</param>
-    public static ModelBuilder ApplySettingsConfiguration(this ModelBuilder mb, DatabaseProvider provider)
+    public static ModelBuilder ApplySettings(this ModelBuilder mb, DatabaseProvider provider)
     {
         ArgumentNullException.ThrowIfNull(mb);
         mb.ApplyConfiguration(new SettingConfiguration(provider));
@@ -101,7 +101,7 @@ public static class ModelBuilderExtensions
     /// <summary>
     /// Applies the settings entity configuration, taking the engine from
     /// <paramref name="context"/> rather than being told it. Call from
-    /// <c>OnModelCreating</c> as <c>modelBuilder.ApplySettingsConfiguration(this)</c>.
+    /// <c>OnModelCreating</c> as <c>modelBuilder.ApplySettings(this)</c>.
     /// <para>
     /// The explicit overload stays for anyone who needs to override the inference — a
     /// provider this package has no mapping for, or a model built against one engine and
@@ -112,14 +112,39 @@ public static class ModelBuilderExtensions
     /// <param name="context">The context being configured; usually <c>this</c>.</param>
     /// <exception cref="InvalidOperationException">
     /// The context's EF Core provider is not one this package ships column mappings for.
-    /// Use the <see cref="ApplySettingsConfiguration(ModelBuilder, DatabaseProvider)"/>
-    /// overload and name the closest engine.
+    /// Use the <see cref="ApplySettings(ModelBuilder, DatabaseProvider)"/> overload and name
+    /// the closest engine.
     /// </exception>
-    public static ModelBuilder ApplySettingsConfiguration(this ModelBuilder mb, DbContext context)
+    public static ModelBuilder ApplySettings(this ModelBuilder mb, DbContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
-        return mb.ApplySettingsConfiguration(ResolveProvider(context.Database.ProviderName));
+        return mb.ApplySettings(ResolveProvider(context.Database.ProviderName));
     }
+
+    /// <summary>
+    /// Renamed to <see cref="ApplySettings(ModelBuilder, DatabaseProvider)"/>.
+    /// </summary>
+    /// <remarks>
+    /// Kept for one release so existing contexts keep compiling, the same way
+    /// <see cref="ISettingDbContext"/> is. The old name described the mechanism rather than
+    /// the library, which read as meaningful next to the <c>ApplyMedia()</c> and
+    /// <c>ApplyMultiLingual()</c> calls it usually sits beside. It was not.
+    /// </remarks>
+    [Obsolete(RenamedMessage)]
+    public static ModelBuilder ApplySettingsConfiguration(this ModelBuilder mb, DatabaseProvider provider)
+        => mb.ApplySettings(provider);
+
+    /// <summary>
+    /// Renamed to <see cref="ApplySettings(ModelBuilder, DbContext)"/>.
+    /// </summary>
+    /// <inheritdoc cref="ApplySettingsConfiguration(ModelBuilder, DatabaseProvider)" path="/remarks"/>
+    [Obsolete(RenamedMessage)]
+    public static ModelBuilder ApplySettingsConfiguration(this ModelBuilder mb, DbContext context)
+        => mb.ApplySettings(context);
+
+    private const string RenamedMessage =
+        "Renamed to ApplySettings, to match ApplyMedia and ApplyMultiLingual. " +
+        "This alias will be removed in the next release.";
 
     /// <summary>
     /// Maps an EF Core provider assembly name onto the engine whose column types and
@@ -137,7 +162,7 @@ public static class ModelBuilderExtensions
         _ => throw new InvalidOperationException(
             $"Cannot infer a settings DatabaseProvider from EF Core provider '{providerName ?? "(none)"}'. " +
             "Supported: SQL Server, PostgreSQL and SQLite. Call " +
-            "ApplySettingsConfiguration(DatabaseProvider) with the engine to target instead.")
+            "ApplySettings(DatabaseProvider) with the engine to target instead.")
     };
 }
 
@@ -145,7 +170,7 @@ public static class ModelBuilderExtensions
 /// <remarks>
 /// Takes a plain <see cref="DbContext"/> and reaches its entities through
 /// <see cref="DbContext.Set{TEntity}()"/>, so a consuming context needs no interface and no
-/// <c>DbSet</c> properties — only <c>ApplySettingsConfiguration</c> in <c>OnModelCreating</c>.
+/// <c>DbSet</c> properties — only <c>ApplySettings</c> in <c>OnModelCreating</c>.
 /// </remarks>
 /// <param name="db">The context the settings entities are mapped on.</param>
 public sealed class EfCoreSettingStore(DbContext db) : ISettingStore

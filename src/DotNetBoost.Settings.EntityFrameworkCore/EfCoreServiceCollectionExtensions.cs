@@ -12,7 +12,7 @@ namespace Microsoft.Extensions.DependencyInjection
         /// Configures Entity Framework Core as the settings provider.
         /// <para>
         /// <typeparamref name="TContext"/> only has to be a <see cref="DbContext"/> that calls
-        /// <c>ApplySettingsConfiguration</c> in <c>OnModelCreating</c>. It needs no interface
+        /// <c>ApplySettings</c> in <c>OnModelCreating</c>. It needs no interface
         /// and no <c>DbSet</c> properties: the store reads its entities through
         /// <see cref="DbContext.Set{TEntity}()"/>.
         /// </para>

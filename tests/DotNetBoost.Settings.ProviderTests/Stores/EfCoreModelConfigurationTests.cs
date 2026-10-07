@@ -5,7 +5,7 @@ using Microsoft.EntityFrameworkCore;
 namespace DotNetBoost.Settings.ProviderTests.Stores;
 
 /// <summary>
-/// <c>ApplySettingsConfiguration</c> picks the Value column type and the concurrency-token
+/// <c>ApplySettings</c> picks the Value column type and the concurrency-token
 /// style per engine, and getting it wrong is the kind of mistake that only shows up as
 /// truncated settings long after the migration ran. These tests read the type back off the
 /// built model, so the mapping is checked without needing any of these servers to exist.
@@ -15,7 +15,7 @@ public class EfCoreModelConfigurationTests
     [Fact]
     public void InferringOverload_ReadsTheEngineOffTheContext()
     {
-        // TestDbContext is on SQLite and calls ApplySettingsConfiguration(this).
+        // TestDbContext is on SQLite and calls ApplySettings(this).
         Assert.Equal("TEXT", ValueColumnTypeOf(new InferredSqliteContext()));
     }
 
@@ -39,9 +39,29 @@ public class EfCoreModelConfigurationTests
 
         var ex = Assert.ThrowsAny<InvalidOperationException>(() => ctx.Model);
 
-        Assert.Contains("ApplySettingsConfiguration(DatabaseProvider)", Flatten(ex), StringComparison.Ordinal);
+        Assert.Contains("ApplySettings(DatabaseProvider)", Flatten(ex), StringComparison.Ordinal);
         Assert.Contains("Microsoft.EntityFrameworkCore.InMemory", Flatten(ex), StringComparison.Ordinal);
     }
+
+    /// <summary>
+    /// The whole purpose of the obsolete alias: a context written against the old name keeps
+    /// compiling and keeps building the same model. Deprecation warning, not a break.
+    /// </summary>
+    [Theory]
+    [InlineData(DatabaseProvider.SqlServer,  "nvarchar(max)")]
+    [InlineData(DatabaseProvider.PostgreSql, "text")]
+    [InlineData(DatabaseProvider.Sqlite,     "TEXT")]
+    public void TheObsoleteName_StillBuildsTheSameModel(DatabaseProvider provider, string expectedColumnType)
+    {
+        Assert.Equal(expectedColumnType, ValueColumnTypeOf(ObsoleteContextFor(provider)));
+
+        // And the same as the new name produces, rather than merely something plausible.
+        Assert.Equal(ValueColumnTypeOf(ContextFor(provider)), ValueColumnTypeOf(ObsoleteContextFor(provider)));
+    }
+
+    [Fact]
+    public void TheObsoleteInferringOverload_StillReadsTheEngineOffTheContext()
+        => Assert.Equal("TEXT", ValueColumnTypeOf(new ObsoleteInferredContext()));
 
     /// <summary>EF wraps a throw from OnModelCreating, so assert over the whole chain.</summary>
     private static string Flatten(Exception ex)
@@ -80,32 +100,66 @@ public class EfCoreModelConfigurationTests
 
     private sealed class InferredSqliteContext : SqliteBackedContext
     {
-        protected override void OnModelCreating(ModelBuilder mb) => mb.ApplySettingsConfiguration(this);
+        protected override void OnModelCreating(ModelBuilder mb) => mb.ApplySettings(this);
     }
 
     private sealed class ExplicitSqlServerContext : SqliteBackedContext
     {
         protected override void OnModelCreating(ModelBuilder mb)
-            => mb.ApplySettingsConfiguration(DatabaseProvider.SqlServer);
+            => mb.ApplySettings(DatabaseProvider.SqlServer);
     }
 
     private sealed class ExplicitPostgresContext : SqliteBackedContext
     {
         protected override void OnModelCreating(ModelBuilder mb)
-            => mb.ApplySettingsConfiguration(DatabaseProvider.PostgreSql);
+            => mb.ApplySettings(DatabaseProvider.PostgreSql);
     }
 
     private sealed class ExplicitSqliteContext : SqliteBackedContext
     {
         protected override void OnModelCreating(ModelBuilder mb)
+            => mb.ApplySettings(DatabaseProvider.Sqlite);
+    }
+
+    // One context type per provider, as above, each calling the obsolete alias. CS0618 is
+    // suppressed here and nowhere else: these exist precisely to exercise the deprecated name.
+    private static DbContext ObsoleteContextFor(DatabaseProvider provider) => provider switch
+    {
+        DatabaseProvider.SqlServer  => new ObsoleteSqlServerContext(),
+        DatabaseProvider.PostgreSql => new ObsoletePostgresContext(),
+        _                           => new ObsoleteSqliteContext()
+    };
+
+#pragma warning disable CS0618 // Deliberately calling the obsolete alias.
+    private sealed class ObsoleteInferredContext : SqliteBackedContext
+    {
+        protected override void OnModelCreating(ModelBuilder mb) => mb.ApplySettingsConfiguration(this);
+    }
+
+    private sealed class ObsoleteSqlServerContext : SqliteBackedContext
+    {
+        protected override void OnModelCreating(ModelBuilder mb)
+            => mb.ApplySettingsConfiguration(DatabaseProvider.SqlServer);
+    }
+
+    private sealed class ObsoletePostgresContext : SqliteBackedContext
+    {
+        protected override void OnModelCreating(ModelBuilder mb)
+            => mb.ApplySettingsConfiguration(DatabaseProvider.PostgreSql);
+    }
+
+    private sealed class ObsoleteSqliteContext : SqliteBackedContext
+    {
+        protected override void OnModelCreating(ModelBuilder mb)
             => mb.ApplySettingsConfiguration(DatabaseProvider.Sqlite);
     }
+#pragma warning restore CS0618
 
     private sealed class InMemoryContext : DbContext
     {
         protected override void OnConfiguring(DbContextOptionsBuilder options)
             => options.UseInMemoryDatabase(nameof(InMemoryContext));
 
-        protected override void OnModelCreating(ModelBuilder mb) => mb.ApplySettingsConfiguration(this);
+        protected override void OnModelCreating(ModelBuilder mb) => mb.ApplySettings(this);
     }
 }

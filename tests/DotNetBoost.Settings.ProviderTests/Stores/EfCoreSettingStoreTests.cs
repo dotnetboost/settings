@@ -10,7 +10,7 @@ namespace DotNetBoost.Settings.ProviderTests.Stores;
 public sealed class TestDbContext(DbContextOptions<TestDbContext> options) : DbContext(options)
 {
     protected override void OnModelCreating(ModelBuilder modelBuilder)
-        => modelBuilder.ApplySettingsConfiguration(this);
+        => modelBuilder.ApplySettings(this);
 }
 
 public sealed class EfCoreSettingStoreTests : SettingStoreContractTests, IDisposable

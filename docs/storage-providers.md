@@ -25,7 +25,7 @@ using Microsoft.EntityFrameworkCore;
 public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(options)
 {
     protected override void OnModelCreating(ModelBuilder mb)
-        => mb.ApplySettingsConfiguration(this);
+        => mb.ApplySettings(this);
 }
 ```
 
@@ -35,7 +35,7 @@ you need to override that, for a model built against one engine and migrated ont
 
 ```csharp
 protected override void OnModelCreating(ModelBuilder mb)
-    => mb.ApplySettingsConfiguration(DatabaseProvider.SqlServer);
+    => mb.ApplySettings(DatabaseProvider.SqlServer);
     // Options: SqlServer | PostgreSql | Sqlite
 ```
 
