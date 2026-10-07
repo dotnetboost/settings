@@ -123,6 +123,34 @@ public class ProjectionEndpointTests
     }
 
     /// <summary>
+    /// The declared response type follows the projector that actually runs, in both
+    /// directions. These are two separate registrations, so replacing one without the other
+    /// would publish a shape nothing returns — the first case below is what catches it.
+    /// </summary>
+    [Fact]
+    public async Task Get_ReplacingATypedProjectorWithAnUntypedOne_DeclaresTheGroup()
+    {
+        await using var app = await TestApp.StartAsync(
+            configureSettings: b => b
+                .UseProjector<ProjectedSettings, TypedProjector>()
+                .ReplaceProjector<ProjectedSettings, UppercasingProjector>());
+
+        Assert.Equal(typeof(ProjectedSettings), DeclaredResponseType(app, Url));
+    }
+
+    /// <inheritdoc cref="Get_ReplacingATypedProjectorWithAnUntypedOne_DeclaresTheGroup"/>
+    [Fact]
+    public async Task Get_ReplacingAnUntypedProjectorWithATypedOne_DeclaresTheProjection()
+    {
+        await using var app = await TestApp.StartAsync(
+            configureSettings: b => b
+                .UseProjector<ProjectedSettings, UppercasingProjector>()
+                .ReplaceProjector<ProjectedSettings, TypedProjector>());
+
+        Assert.Equal(typeof(BrandingView), DeclaredResponseType(app, Url));
+    }
+
+    /// <summary>
     /// The regression that matters most: an untyped projector is what every existing consumer
     /// has, and its endpoint must go on declaring the stored group.
     /// </summary>
