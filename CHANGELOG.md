@@ -125,6 +125,20 @@ This project follows [Semantic Versioning](https://semver.org/).
   type, which would surface much later as truncated settings.
 
 ### Changed
+- **Two projectors for one settings group is now a startup error.** `UseProjector` used
+  `AddScoped`, so a second registration for the same group was accepted and the last one
+  silently won — the other was never even constructed, and the response was quietly missing
+  half its shape. That is never what anyone means: projectors do not compose, because
+  `ProjectAsync` takes the *group*, so a second has nowhere to receive the first's output. A
+  group needing both translations and media wants one projector doing the join.
+  `Build()` now rejects it, beside the checks for duplicate group names and routes, naming the
+  group and both implementations. The same implementation type registered twice is collapsed
+  rather than reported — an idempotent mistake, not an ambiguity. **Migration:** an app that
+  relied on the implicit last-wins to override a projector set by a shared
+  `AddMyCompanySettings()` should call the new **`.ReplaceProjector<TSettings, TProjector>()`**,
+  which the error message names. Registrations added *after* `Build()` are not seen and still
+  win by last-wins, which is what keeps the test-override seam open. Prerelease-cheap: nothing
+  that was working correctly changes.
 - **The schema endpoint merges every applicable `ISettingSchemaContributor` instead of using the
   first.** Constraints are additive facts about a property rather than a decision, so two
   contributors describing different aspects of one group is the normal case — and first-match

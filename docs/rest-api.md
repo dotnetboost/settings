@@ -51,6 +51,12 @@ builder.Services.AddSettings()
     .Build();
 ```
 
+**One projector per group.** They do not compose: `ProjectAsync` takes the *group*, so a second
+projector has nowhere to receive the first's output. Registering two is rejected by `Build()`
+rather than silently letting the last one win — a group that needs both translations and media
+wants one projector doing the join. To override a projector a shared registration already set,
+call `.ReplaceProjector<TSettings, TProjector>()`.
+
 Projectors are registered scoped, so they can depend on anything else in the request scope.
 Four rules make this safe to have:
 
