@@ -132,12 +132,12 @@ This project follows [Semantic Versioning](https://semver.org/).
 - `MapSettingsEndpoints` now tags its routes `Settings`, matching the sibling DotNetBoost
   packages. The `app.MapGroup("").WithTags("Settings").MapSettingsEndpoints()` dance — an empty
   prefix whose only purpose was to carry a tag — becomes `app.MapSettingsEndpoints()`.
-- `ApplySettingsConfiguration(DbContext)`: an overload that reads the engine off the context, so
-  `OnModelCreating` is `modelBuilder.ApplySettingsConfiguration(this)` and switching provider
-  needs no matching edit. The explicit `ApplySettingsConfiguration(DatabaseProvider)` overload
-  stays for overriding it — a model built against one engine and migrated onto another. An
-  unrecognised EF Core provider throws naming the overload to use rather than guessing a column
-  type, which would surface much later as truncated settings.
+- `ApplySettings(DbContext)`: an overload that reads the engine off the context, so
+  `OnModelCreating` is `modelBuilder.ApplySettings(this)` and switching provider needs no
+  matching edit. The explicit `ApplySettings(DatabaseProvider)` overload stays for overriding
+  it — a model built against one engine and migrated onto another. An unrecognised EF Core
+  provider throws naming the overload to use rather than guessing a column type, which would
+  surface much later as truncated settings.
 
 ### Changed
 - **`ApplySettingsConfiguration` is renamed `ApplySettings`.** Media exposes
@@ -145,10 +145,11 @@ This project follows [Semantic Versioning](https://semver.org/).
   Settings was the only one of the three naming the mechanism rather than the library. In a
   consuming `AppDbContext` the three calls sit on adjacent lines, so the odd shape read as if it
   meant something, and it did not. Done now because `1.0.0-preview.2` is the last cheap moment.
-  Both overloads are renamed and **the old names remain as `[Obsolete]` forwarders**, so existing
-  contexts keep compiling with a deprecation warning rather than breaking; the aliases go in the
-  next release. This supersedes the naming used in the Added entry for the context-inferring
-  overload below — that overload is unchanged, only its name.
+  `ApplySettingsConfiguration(DatabaseProvider)` shipped in `1.0.0-preview.1`, so **it remains as
+  an `[Obsolete]` forwarder**: a context written against it keeps compiling with a deprecation
+  warning rather than breaking, and the alias goes in the next release. The context-inferring
+  overload is listed under Added above, under its new name — it has never been released under
+  the old one.
 - **Two projectors for one settings group is now a startup error.** `UseProjector` used
   `AddScoped`, so a second registration for the same group was accepted and the last one
   silently won — the other was never even constructed, and the response was quietly missing
@@ -189,7 +190,7 @@ This project follows [Semantic Versioning](https://semver.org/).
 - **The EF Core store takes a plain `DbContext`.** `EfCoreSettingStore` reaches its entities
   through `Set<Setting>()`, and `UseEntityFrameworkCore<TContext>` no longer constrains
   `TContext` beyond `DbContext`. A consuming context's whole settings registration is now one
-  `ApplySettingsConfiguration` call in `OnModelCreating` — no interface, no `DbSet` properties
+  `ApplySettings` call in `OnModelCreating` — no interface, no `DbSet` properties
   the library never read. `ISettingDbContext` is **obsolete** and does nothing; delete
   `: ISettingDbContext` and the two `DbSet` properties from your context and nothing else
   changes. It will be removed in the next release.
