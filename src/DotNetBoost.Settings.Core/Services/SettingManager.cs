@@ -220,9 +220,21 @@ public sealed partial class SettingManager : ISettingManager
                 throw new SettingConcurrencyException(map.GroupName, "*");
         }
 
+        // A decryption failure is fatal here, exactly as it is on the read path. Substituting
+        // defaults would read every encrypted property as changed, write them all back and tell
+        // an observer they changed — the silent-default behaviour that IgnoreDecryptionFailures()
+        // exists to make a deliberate choice rather than an accident. Anything else still falls
+        // back to defaults so a mapping fault cannot block a write, but is logged, not swallowed.
         T previous;
-        try   { previous = MapToModel<T>(prevRows); }
-        catch { previous = new T(); }
+        try
+        {
+            previous = MapToModel<T>(prevRows);
+        }
+        catch (Exception ex) when (ex is not SettingDecryptionException)
+        {
+            LogPreviousModelFailed(_logger, map.GroupName, ex);
+            previous = new T();
+        }
 
         var rows = new List<Setting>(map.Properties.Count);
 
@@ -286,11 +298,21 @@ public sealed partial class SettingManager : ISettingManager
         var prevRows = await _store.GetGroupAsync(map.GroupName, ct).ConfigureAwait(false);
         var prevMap  = prevRows.ToDictionary(r => r.Key, StringComparer.OrdinalIgnoreCase);
 
+        // Both map the same rows on purpose: `previous` is the before-image and `candidate` is
+        // the instance mutated below, so they cannot be the same object. A decryption failure is
+        // fatal for the reason given in the group overload above.
         T previous, candidate;
-        try   { previous  = MapToModel<T>(prevRows); }
-        catch { previous  = new T(); }
-        try   { candidate = MapToModel<T>(prevRows); }
-        catch { candidate = new T(); }
+        try
+        {
+            previous  = MapToModel<T>(prevRows);
+            candidate = MapToModel<T>(prevRows);
+        }
+        catch (Exception ex) when (ex is not SettingDecryptionException)
+        {
+            LogPreviousModelFailed(_logger, map.GroupName, ex);
+            previous  = new T();
+            candidate = new T();
+        }
 
         prop.Setter(candidate!, value);
 
@@ -687,6 +709,10 @@ public sealed partial class SettingManager : ISettingManager
     [LoggerMessage(EventId = 1005, Level = LogLevel.Warning,
         Message = "Cannot decrypt the stored value of '{group}.{key}' to compare it; treating it as changed.")]
     private static partial void LogChangeCompareFailed(ILogger logger, string group, string key, Exception ex);
+
+    [LoggerMessage(EventId = 1009, Level = LogLevel.Error,
+        Message = "Cannot map the stored state of settings group '{group}'; comparing against defaults instead.")]
+    private static partial void LogPreviousModelFailed(ILogger logger, string group, Exception ex);
 
     /// <summary>What this instance's cached copy of a group was loaded under, and when it was last re-checked.</summary>
     private sealed record CacheProbe(string? Version, DateTimeOffset CheckedAt);

@@ -98,8 +98,9 @@ public class FluentSettingValidatorTests
     public void AddFluentValidationSettings_RejectsNullArguments()
     {
         var assembly = typeof(BridgeSettingsValidator).Assembly;
+        IServiceCollection services = null!;
 
-        Assert.Throws<ArgumentNullException>(() => ((IServiceCollection)null!).AddFluentValidationSettings(assembly));
+        Assert.Throws<ArgumentNullException>(() => services.AddFluentValidationSettings(assembly));
         Assert.Throws<ArgumentNullException>(() => new ServiceCollection().AddFluentValidationSettings(null!));
     }
 
