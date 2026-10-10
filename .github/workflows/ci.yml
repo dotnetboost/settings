@@ -259,8 +259,23 @@ jobs:
             8.0.x
             10.0.x
 
+      # No `queries:` on purpose — that selects CodeQL's default suite, which is the
+      # security-focused one. There is no pack named `security` to ask for: the named suites are
+      # security-extended, security-and-quality and security-experimental, and naming a
+      # non-existent one fails init outright rather than falling back.
+      #
+      # This replaces security-and-quality, whose quality half posts findings as pull request
+      # review comments. The ruleset on main requires every conversation resolved, so each PR
+      # arrived pre-blocked by style notes to dismiss by hand — eleven on #7, of which eight were
+      # deliberate code or false positives.
+      #
+      # It narrows what runs rather than what is reported, so it is a real loss: the bare-catch
+      # bug fixed in 0f2ef53 was found by a quality query, not a security one. The trade is that
+      # quality rules are the analyser's weakest signal here and the friction landed on every PR,
+      # while the compiler already enforces more than they do — warnings-as-errors with
+      # latest-recommended analysis.
       - uses: github/codeql-action/init@v3
-        with: { languages: csharp, queries: security-and-quality }
+        with: { languages: csharp }
 
       - run: dotnet restore
       - run: dotnet build --configuration Release --no-restore
