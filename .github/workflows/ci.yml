@@ -76,13 +76,17 @@ jobs:
           name: unit-test-results
           path: ./test-results
 
-      - name: Coverage gate
+      # Cobertura is in the list so the threshold step below has a single merged report to
+      # read. The unit tests run on both TFMs, so the artifact holds two coverage files
+      # describing the same source: summing them would double-count, and taking either one
+      # alone misses what only the other compiles. ReportGenerator's merge is the honest number
+      # (81.55% line, against 81.95% for net10.0 by itself).
+      - name: Generate coverage report
         uses: danielpalme/ReportGenerator-GitHub-Action@5
         with:
           reports: './test-results/**/coverage.cobertura.xml'
           targetdir: './coverage-html'
-          reporttypes: 'HtmlInline;Badges;MarkdownSummaryGithub'
-          minimumCoverage: ${{ env.COVERAGE_THRESHOLD }}
+          reporttypes: 'HtmlInline;Badges;MarkdownSummaryGithub;Cobertura'
           tag: ${{ github.run_number }}
 
       - name: Publish coverage summary
@@ -90,8 +94,66 @@ jobs:
         run: |
           [ -f "./coverage-html/SummaryGithub.md" ] && cat ./coverage-html/SummaryGithub.md >> $GITHUB_STEP_SUMMARY || true
 
+      # Uploaded before the gate runs, and on failure too: a build that fails on coverage is
+      # exactly when someone wants the line-by-line report.
       - uses: actions/upload-artifact@v4
+        if: always()
         with: { name: coverage-html, path: ./coverage-html/ }
+
+      # The actual gate.
+      #
+      # This job used to pass `minimumCoverage` to the action above, which has no such input —
+      # GitHub logged "Unexpected input(s) 'minimumCoverage'" and ignored it, so the job
+      # generated a report and exited 0 whatever the coverage was. A required check named
+      # "Coverage Gate" that cannot fail is worse than no check: the ruleset demands it and
+      # everyone reads the green tick as proof.
+      #
+      # Line coverage only. Branch coverage is several points lower (75.73% merged) and gating
+      # on it today would fail the build over code nobody is touching; it is printed here so the
+      # number stays visible, and raising it is a deliberate follow-up rather than an ambush.
+      - name: Enforce coverage threshold
+        run: |
+          set -euo pipefail
+
+          REPORT=./coverage-html/Cobertura.xml
+          if [[ ! -f "${REPORT}" ]]; then
+            echo "::error::No merged Cobertura report at ${REPORT} — coverage cannot be verified"
+            exit 1
+          fi
+
+          python3 - "${REPORT}" "${COVERAGE_THRESHOLD}" <<'PY'
+          import os
+          import sys
+          import xml.etree.ElementTree as ET
+
+          report, threshold = sys.argv[1], float(sys.argv[2])
+          root = ET.parse(report).getroot()
+
+          # Abort on a missing or malformed rate rather than treating it as 0 or as "fine". Passing
+          # silently is the precise failure this step exists to replace, so it must not be reachable.
+          try:
+              line = float(root.get("line-rate")) * 100
+              branch = float(root.get("branch-rate")) * 100
+          except (TypeError, ValueError) as exc:
+              print(f"::error::Cannot read line-rate/branch-rate from {report}: {exc}")
+              sys.exit(1)
+
+          print(f"Line coverage:   {line:.2f}%  (threshold {threshold:.0f}%)")
+          print(f"Branch coverage: {branch:.2f}%  (reported, not gated)")
+
+          summary = os.environ.get("GITHUB_STEP_SUMMARY")
+          if summary:
+              with open(summary, "a", encoding="utf-8") as handle:
+                  handle.write("\n| Metric | Coverage | Threshold |\n|---|---|---|\n")
+                  handle.write(f"| Line | {line:.2f}% | {threshold:.0f}% |\n")
+                  handle.write(f"| Branch | {branch:.2f}% | not gated |\n")
+
+          if line < threshold:
+              print(f"::error::Line coverage {line:.2f}% is below the {threshold:.0f}% threshold")
+              sys.exit(1)
+
+          print(f"Line coverage {line:.2f}% meets the {threshold:.0f}% threshold")
+          PY
 
   # ───────────────────────────────────────────────────────────────────────
   provider-tests:
