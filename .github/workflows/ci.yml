@@ -259,8 +259,18 @@ jobs:
             8.0.x
             10.0.x
 
+      # security, not security-and-quality. The quality half posts its findings as pull request
+      # review comments, and the ruleset on main requires every conversation resolved, so each PR
+      # arrived pre-blocked by style notes that had to be dismissed by hand — eleven of them on
+      # #7, of which eight were deliberate code or false positives.
+      #
+      # This narrows what runs rather than what is reported, so it is a real loss: the bare-catch
+      # bug fixed in 0f2ef53 was found by a quality query, not a security one. The trade accepted
+      # here is that quality rules are the analyser's weakest signal on this codebase and the
+      # friction was landing on every PR, while the compiler already enforces more than CodeQL's
+      # quality suite does — warnings-as-errors with latest-recommended analysis.
       - uses: github/codeql-action/init@v3
-        with: { languages: csharp, queries: security-and-quality }
+        with: { languages: csharp, queries: security }
 
       - run: dotnet restore
       - run: dotnet build --configuration Release --no-restore
