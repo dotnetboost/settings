@@ -61,7 +61,7 @@ builder.Services.AddSettings()
 
 var app = builder.Build();
 
-// Create the database and the settings tables on first run.
+// Create the database and the settings table on first run.
 // In a real app, use EF Core migrations instead.
 using (var scope = app.Services.CreateScope())
 {
@@ -86,7 +86,7 @@ public class MailSettings
     public int Port { get; set; } = 587;
 }
 
-// Your EF Core context: add the two settings tables to it. One line, no interface
+// Your EF Core context: add the settings table to it. One line, no interface
 // and no DbSet properties — the engine is read off the context.
 public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(options)
 {

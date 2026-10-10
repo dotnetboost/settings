@@ -14,7 +14,7 @@ Pick one provider per application. Each is a separate package on top of `DotNetB
 dotnet add package DotNetBoost.Settings.EntityFrameworkCore --prerelease
 ```
 
-Add the two settings tables to your `DbContext`. That one call is the whole registration —
+Add the settings table to your `DbContext`. That one call is the whole registration —
 your context needs no interface and no `DbSet` properties, because the store reaches its
 entities through `Set<T>()`:
 
