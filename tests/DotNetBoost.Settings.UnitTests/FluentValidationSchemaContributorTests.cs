@@ -30,6 +30,56 @@ public class FluentValidationSchemaContributorTests
         Assert.Equal(255, constraints["maxLength"]);
     }
 
+    /// <summary>
+    /// An exact length is both bounds at once. It matters that this is read as exact rather than
+    /// falling through to the general length rule, which would publish only a minimum and let a
+    /// client accept a value the server rejects.
+    /// </summary>
+    [Fact]
+    public void Describe_PublishesAnExactLengthAsBothBounds()
+    {
+        var constraints = Describe()[nameof(FormSettings.Region)];
+
+        Assert.Equal(2, constraints["minLength"]);
+        Assert.Equal(2, constraints["maxLength"]);
+    }
+
+    /// <summary>
+    /// A one-sided length rule publishes the bound it states and stays silent on the other, so a
+    /// client does not infer a floor of zero as a real constraint.
+    /// </summary>
+    [Fact]
+    public void Describe_PublishesAMaximumLengthAlone()
+    {
+        var constraints = Describe()[nameof(FormSettings.Label)];
+
+        Assert.Equal(50, constraints["maxLength"]);
+        Assert.DoesNotContain("minLength", constraints.Keys, StringComparer.Ordinal);
+    }
+
+    [Fact]
+    public void Describe_PublishesAMinimumLengthAlone()
+    {
+        var constraints = Describe()[nameof(FormSettings.Slug)];
+
+        Assert.Equal(4, constraints["minLength"]);
+        Assert.DoesNotContain("maxLength", constraints.Keys, StringComparer.Ordinal);
+    }
+
+    /// <summary>
+    /// The four comparisons split along inclusive/exclusive rather than collapsing into min/max:
+    /// a client that renders <c>exclusiveMax</c> as <c>max</c> would allow the boundary value the
+    /// server refuses.
+    /// </summary>
+    [Fact]
+    public void Describe_DistinguishesInclusiveFromExclusiveComparisons()
+    {
+        var schema = Describe();
+
+        Assert.Equal(32, schema[nameof(FormSettings.Workers)]["max"]);
+        Assert.Equal(0, schema[nameof(FormSettings.Timeout)]["exclusiveMin"]);
+    }
+
     [Fact]
     public void Describe_PublishesNotEmptyAsRequired()
         => Assert.Equal(true, Describe()[nameof(FormSettings.Host)]["required"]);
@@ -103,6 +153,11 @@ public class FluentValidationSchemaContributorTests
         public int Retries { get; set; }
         public string Code { get; set; } = string.Empty;
         public string Opaque { get; set; } = string.Empty;
+        public string Region { get; set; } = string.Empty;
+        public string Label { get; set; } = string.Empty;
+        public string Slug { get; set; } = string.Empty;
+        public int Workers { get; set; }
+        public int Timeout { get; set; }
     }
 
     public class UnvalidatedSettings
@@ -119,6 +174,11 @@ public class FluentValidationSchemaContributorTests
             RuleFor(x => x.Retries).GreaterThanOrEqualTo(0).LessThan(10);
             RuleFor(x => x.Code).Matches("^[a-z]+$");
             RuleFor(x => x.Opaque).Must(v => v.Length % 2 == 0);
+            RuleFor(x => x.Region).Length(2);
+            RuleFor(x => x.Label).MaximumLength(50);
+            RuleFor(x => x.Slug).MinimumLength(4);
+            RuleFor(x => x.Workers).LessThanOrEqualTo(32);
+            RuleFor(x => x.Timeout).GreaterThan(0);
         }
     }
 }
