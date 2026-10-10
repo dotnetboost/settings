@@ -5,6 +5,18 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+_Nothing yet._
+
+## [1.0.0-preview.2] — 2026-10-10
+
+The second prerelease. **One breaking change from `1.0.0-preview.1`:** the built-in audit trail
+is gone, replaced by the `ISettingWriteObserver` hook. Its entry below carries the migration
+step.
+
+Two deprecations rather than breaks: `ISettingDbContext` is obsolete and does nothing, and
+`ApplySettingsConfiguration` is renamed `ApplySettings`. Both still compile, with a warning, and
+go in the next release. Still not frozen: pin an exact version rather than a floating range.
+
 ### Removed
 - **The built-in audit trail, as BREAKING in prerelease.** Gone: `ISettingAuditStore`,
   `SettingAuditEntry`, `EfCoreAuditStore`, `.UseAuditStore<T>()`,

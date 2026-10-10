@@ -68,7 +68,7 @@ using (var scope = app.Services.CreateScope())
     await scope.ServiceProvider.GetRequiredService<AppDbContext>().Database.EnsureCreatedAsync();
 }
 
-app.MapSettingsEndpoints();   // adds GET/POST /api/settings/mail-server
+app.MapSettingsEndpoints();   // GET/POST /api/settings/mail-server, plus the group list and schema
 
 app.MapGet("/", async (ISettingManager settings) =>
 {
@@ -150,7 +150,9 @@ public class EmailService(ISettingManager settings)
 ```
 
 Reads are cached (10 minutes by default), so reading settings on every request is cheap. A write
-clears the cache on that server straight away. If you run several servers, see [Caching](https://github.com/dotnetboost/settings/blob/main/docs/caching.md).
+clears the cache on the instance that made it. If you run more than one instance, add
+`.SynchronizeThroughDistributedCache()` so the others pick the change up too — see
+[Caching](https://github.com/dotnetboost/settings/blob/main/docs/caching.md#running-on-more-than-one-instance).
 
 ---
 
@@ -165,7 +167,7 @@ already have:
 | Dapper / plain ADO.NET | `DotNetBoost.Settings.Dapper` | `.UseDapper(sp => new SqlConnection(cs), migrateSchema: true)` |
 | MongoDB | `DotNetBoost.Settings.MongoDb` | `.UseMongoDb("mongodb://localhost:27017", "my_app_db")` |
 
-EF Core needs two extra `DbSet`s on your context. See the
+EF Core needs one line in `OnModelCreating` — no interface and no `DbSet` properties. See the
 [storage providers guide](https://github.com/dotnetboost/settings/blob/main/docs/storage-providers.md)
 for the full setup of each provider.
 
@@ -189,10 +191,11 @@ builder.Services.AddSettings()
 |---|---|
 | Use SQL Server, PostgreSQL or MongoDB instead of SQLite | [Storage providers](https://github.com/dotnetboost/settings/blob/main/docs/storage-providers.md) |
 | Expose and secure the REST API | [REST API](https://github.com/dotnetboost/settings/blob/main/docs/rest-api.md) |
+| Change what `GET` returns without changing what is stored | [Projectors](https://github.com/dotnetboost/settings/blob/main/docs/rest-api.md#reshaping-what-get-returns) |
 | Reject invalid values (`[Range]`, FluentValidation) | [Validation](https://github.com/dotnetboost/settings/blob/main/docs/validation.md) |
 | Encrypt passwords and API keys in the database | [Encryption](https://github.com/dotnetboost/settings/blob/main/docs/encryption.md) |
 | Rename a settings class safely, set defaults | [Defining settings](https://github.com/dotnetboost/settings/blob/main/docs/defining-settings.md) |
-| Run on several servers (Redis cache) | [Caching](https://github.com/dotnetboost/settings/blob/main/docs/caching.md) |
+| Run on several servers and keep their caches in step | [Caching](https://github.com/dotnetboost/settings/blob/main/docs/caching.md#running-on-more-than-one-instance) |
 | Run code when a setting changes | [Change notifications](https://github.com/dotnetboost/settings/blob/main/docs/change-notifications.md) |
 | Stop two people overwriting each other's edits | [Reading & writing](https://github.com/dotnetboost/settings/blob/main/docs/reading-and-writing.md#concurrent-writes) |
 | Record or forward every write (and who made it) | [Write notifications](https://github.com/dotnetboost/settings/blob/main/docs/write-notifications.md) |
