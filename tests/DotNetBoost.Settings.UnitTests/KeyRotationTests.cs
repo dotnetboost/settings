@@ -192,6 +192,59 @@ public class DecryptionFailureTests
         Assert.Equal("smtp.example.com", model.Host);   // unencrypted properties still load
     }
 
+    /// <summary>
+    /// The write path mapped the stored rows inside a bare <c>catch { previous = new T(); }</c>,
+    /// so it swallowed this exception and compared against compile-time defaults instead. That
+    /// read every encrypted property as changed, wrote them all back under the current key and
+    /// told a write observer they had changed — silently losing the stranded value, which is the
+    /// failure the throw exists to prevent. Nothing was logged either, so the only symptom was
+    /// a secret quietly replaced by its default.
+    /// </summary>
+    [Fact]
+    public async Task UndecryptableValue_ThrowsOnAGroupWrite_AndWritesNothing()
+    {
+        var mgr = Build(out var store);
+
+        var ex = await Assert.ThrowsAsync<SettingDecryptionException>(
+            () => mgr.For<SecretSettings>().SetAsync(new SecretSettings { Host = "smtp.other.com" }));
+
+        Assert.Equal(nameof(SecretSettings.ApiKey), ex.Key);
+        store.Verify(x => x.UpsertManyAsync(It.IsAny<IEnumerable<Setting>>(), It.IsAny<CancellationToken>()), Times.Never);
+        store.Verify(x => x.UpsertAsync(It.IsAny<Setting>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    /// <summary>
+    /// Same fault on the single-property overload, which mapped the group twice under two bare
+    /// catches. Writing one unrelated property must not be the operation that discards a secret
+    /// it never names.
+    /// </summary>
+    [Fact]
+    public async Task UndecryptableValue_ThrowsOnASinglePropertyWrite_AndWritesNothing()
+    {
+        var mgr = Build(out var store);
+
+        var ex = await Assert.ThrowsAsync<SettingDecryptionException>(
+            () => mgr.For<SecretSettings>().SetAsync(x => x.Host, "smtp.other.com"));
+
+        Assert.Equal(nameof(SecretSettings.ApiKey), ex.Key);
+        store.Verify(x => x.UpsertManyAsync(It.IsAny<IEnumerable<Setting>>(), It.IsAny<CancellationToken>()), Times.Never);
+        store.Verify(x => x.UpsertAsync(It.IsAny<Setting>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    /// <summary>
+    /// Opting out still opts out: the fallback to defaults is a choice the caller can make, and
+    /// the fix narrows what is caught rather than removing the fallback.
+    /// </summary>
+    [Fact]
+    public async Task UndecryptableValue_StillWrites_WhenExplicitlyIgnored()
+    {
+        var mgr = Build(out var store, o => o.ThrowOnDecryptionFailure = false);
+
+        await mgr.For<SecretSettings>().SetAsync(x => x.Host, "smtp.other.com");
+
+        store.Verify(x => x.UpsertManyAsync(It.IsAny<IEnumerable<Setting>>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
     [Fact]
     public void IgnoreDecryptionFailures_FlowsFromTheBuilder()
     {

@@ -208,6 +208,19 @@ go in the next release. Still not frozen: pin an exact version rather than a flo
   changes. It will be removed in the next release.
 
 ### Fixed
+- **A write silently replaced an undecryptable secret with its default.** `SetAsync` mapped the
+  stored rows inside a bare `catch { previous = new T(); }`, which swallowed the
+  `SettingDecryptionException` that `MapToModel` raises on purpose and compared against
+  compile-time defaults instead. Every `[Sensitive]` property then read as changed, so a write to
+  one unrelated property rewrote them all under the current key, told `ISettingWriteObserver`
+  they had changed, and discarded the stranded values — the exact "application running on default
+  credentials" outcome the throw was added to prevent, reachable through the write path and
+  bypassing the `IgnoreDecryptionFailures()` opt-out. Nothing was logged, so the only symptom was
+  a secret quietly becoming its default.
+  A decryption failure now propagates from a write as it already did from a read, and no row is
+  written. Other mapping faults still fall back to defaults so a write cannot be blocked by one,
+  but are logged rather than swallowed. `IgnoreDecryptionFailures()` is unaffected: opting out
+  still falls back and still writes.
 - **`SetAsync(selector, value)` could revert another writer's change to a different property.**
   It rebuilt the whole model *from the cache* and put it through the group write, which compares
   every property against fresh store rows and writes whatever differs. A property another
