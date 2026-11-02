@@ -197,6 +197,27 @@ public class SettingWriteObserverTests
     }
 
     /// <summary>
+    /// What an observer needs to read the group's attributes without scanning assemblies for
+    /// a class whose resolved name matches. Checked on all three write paths, since each
+    /// builds its notification separately.
+    /// </summary>
+    [Fact]
+    public async Task Write_CarriesTheGroupType_OnEveryWritePath()
+    {
+        var (mgr, _, observer) = Build();
+        var accessor = mgr.For<ObservedSettings>();
+
+        await accessor.SetAsync(new ObservedSettings { Host = "a" });
+        await accessor.SetAsync(x => x.Port, 587);
+        await accessor.ClearAsync();
+
+        Assert.Equal(
+            [SettingWriteKind.Updated, SettingWriteKind.Updated, SettingWriteKind.Cleared],
+            observer.Writes.Select(w => w.Kind));
+        Assert.All(observer.Writes, w => Assert.Equal(typeof(ObservedSettings), w.GroupType));
+    }
+
+    /// <summary>
     /// An observer runs after the store write committed and the cache entry was evicted, so
     /// failing the call would report a write that in fact succeeded.
     /// </summary>
