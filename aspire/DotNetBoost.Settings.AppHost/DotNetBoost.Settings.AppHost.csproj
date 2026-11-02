@@ -2,7 +2,7 @@
 
   <!-- Turns this project into an Aspire AppHost: generates the strongly typed
        `Projects.*` handles used by AddProject<T>() and the `aspire run` entry point. -->
-  <Sdk Name="Aspire.AppHost.Sdk" Version="13.5.2" />
+  <Sdk Name="Aspire.AppHost.Sdk" Version="13.6.4" />
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
