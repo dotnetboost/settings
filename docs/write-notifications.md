@@ -91,6 +91,26 @@ deliberately not the one for [`ISettingProjector<T>`](rest-api.md#reshaping-what
 which *can* fail a request — a failed notification must not break a committed write, while a
 failed projection would otherwise return a wrong response.
 
+So an observer is the wrong place for anything that must not be lost. Its failures are counted
+rather than surfaced: each one also adds 1 to a counter on the `DotNetBoost.Settings` meter, so
+a rate of them shows up on a dashboard instead of only in the logs.
+
+| Instrument | Counts | Tags |
+|---|---|---|
+| `dotnetboost.settings.write_observer.failures` | Write observers that threw | `dotnetboost.settings.observer`, `dotnetboost.settings.group`, `error.type` |
+| `dotnetboost.settings.change_handler.failures` | [Change handlers](change-notifications.md) that threw | `dotnetboost.settings.handler`, `dotnetboost.settings.group`, `error.type` |
+
+The observer and handler tags are the implementation's class name, as in the log line. Every
+tag is bounded by your own types, never by a value. To export them with OpenTelemetry:
+
+```csharp
+builder.Services.AddOpenTelemetry()
+    .WithMetrics(metrics => metrics.AddMeter("DotNetBoost.Settings"));
+```
+
+The meter is created through the container's `IMeterFactory`, which every generic host
+registers, so each host — a test host included — gets its own.
+
 ## The stopgap: logging writes
 
 `LoggingSettingWriteObserver` ships in Core so the hook is not an empty port:

@@ -7,6 +7,7 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ### Added
 - `SettingWrite.GroupType`: the settings class a write was made to. An observer that needs the group's attributes no longer has to scan assemblies for a class whose resolved name matches `GroupName`. It is an init property, so code that constructs a `SettingWrite` keeps compiling.
+- The library's first metrics, on a `DotNetBoost.Settings` meter: `dotnetboost.settings.write_observer.failures` and `dotnetboost.settings.change_handler.failures`, each tagged with the implementation's class name, the group and `error.type`. Observer and handler exceptions are still logged and swallowed; until now the log line was the only trace of them. The meter is created through the container's `IMeterFactory` when there is one.
 
 ### Changed
 - Aspire moved from 13.5.2 to 13.6.4, and Microsoft.Extensions.* and EF Core packages from 10.0.11 to 10.0.12 — the floor Aspire 13.6 requires.

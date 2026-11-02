@@ -28,6 +28,10 @@ namespace Microsoft.Extensions.DependencyInjection
             // needs no configuration and behaves exactly as it did before signalling existed.
             services.TryAddSingleton<ISettingChangeSignal, NullSettingChangeSignal>();
 
+            // Takes the container's IMeterFactory when there is one, which every generic host
+            // registers; without one the instruments use a meter shared by the process.
+            services.TryAddSingleton<SettingMetrics>();
+
             return new SettingBuilder(services);
         }
     }
