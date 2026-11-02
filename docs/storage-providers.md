@@ -39,8 +39,9 @@ protected override void OnModelCreating(ModelBuilder mb)
     // Options: SqlServer | PostgreSql | Sqlite
 ```
 
-> **Upgrading from `1.0.0-preview.1`?** `ISettingDbContext` is obsolete and does nothing.
-> Delete `: ISettingDbContext` and the two `DbSet` properties; nothing else changes.
+> **Upgrading from `1.0.0-preview.1`?** `ISettingDbContext` is gone. Delete
+> `: ISettingDbContext` and the two `DbSet` properties; nothing else changes. If you call
+> `ApplySettingsConfiguration`, rename it to `ApplySettings`.
 > `UseEntityFrameworkCore<TContext>()` registers nothing against `DbContext` itself, so the
 > library never claims a framework type it does not own.
 

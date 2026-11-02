@@ -5,6 +5,19 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.0.0-preview.3] — 2026-11-02
+
+The third prerelease. It adds what auditing needs from the library: `ISettingWriteParticipant`,
+which commits its work in the same transaction as a settings write, and `SettingWrite.GroupType`.
+
+**Two breaking changes from `1.0.0-preview.2`.** The two APIs deprecated in preview.2 are
+removed, as that release announced. And a clear now reports what it deleted, so an observer that
+read an empty `Changes` as "this was a clear" must check `Kind` instead. Both entries below carry
+the step to take. Still not frozen: pin an exact version rather than a floating range.
+
+### Removed
+- **`ISettingDbContext` and `ApplySettingsConfiguration`, as BREAKING in prerelease.** Both were deprecated in `1.0.0-preview.2` for removal in this release. Delete `: ISettingDbContext` and its `DbSet` properties from your context, and rename `ApplySettingsConfiguration` to `ApplySettings`. Neither changes the model, so there is no migration to run.
+
 ### Added
 - `SettingWrite.GroupType`: the settings class a write was made to. An observer that needs the group's attributes no longer has to scan assemblies for a class whose resolved name matches `GroupName`. It is an init property, so code that constructs a `SettingWrite` keeps compiling.
 - The library's first metrics, on a `DotNetBoost.Settings` meter: `dotnetboost.settings.write_observer.failures` and `dotnetboost.settings.change_handler.failures`, each tagged with the implementation's class name, the group and `error.type`. Observer and handler exceptions are still logged and swallowed; until now the log line was the only trace of them. The meter is created through the container's `IMeterFactory` when there is one.
@@ -12,7 +25,7 @@ This project follows [Semantic Versioning](https://semver.org/).
 - `IEnlistingSettingStore`, the store capability participants require, and a `SettingBuilderGuard.EnsureProviderNotConfigured` overload through which a provider declares it. Only Entity Framework Core does. `Build()` refuses a participant for Dapper or MongoDB, and a write refuses one at run time for a store that cannot enlist, rather than run it with no atomicity.
 
 ### Changed
-- **A clear now reports what it deleted.** A `Cleared` `SettingWrite` used to carry an empty `Changes`; it now lists one `SettingChange` per deleted row, with the stored value as `OldValue` and a null `NewValue`, redacted for `[Sensitive]` properties and for any encrypted row. The manager reads the group before deleting to do it, but only when a participant or observer is registered. An observer that relied on `Changes` being empty for a clear should check `Kind` instead.
+- **A clear now reports what it deleted, as BREAKING in prerelease.** A `Cleared` `SettingWrite` used to carry an empty `Changes`; it now lists one `SettingChange` per deleted row, with the stored value as `OldValue` and a null `NewValue`, redacted for `[Sensitive]` properties and for any encrypted row. The manager reads the group before deleting to do it, but only when a participant or observer is registered. An observer that relied on `Changes` being empty for a clear should check `Kind` instead.
 - `EfCoreSettingStore.DeleteGroupAsync`, when a participant has enlisted something, runs the delete and a `SaveChangesAsync` in one transaction: the caller's if there is one, otherwise its own inside the context's execution strategy, so it works under `EnableRetryOnFailure`. With nothing enlisted it is the single `ExecuteDeleteAsync` it was.
 - Aspire moved from 13.5.2 to 13.6.4, and Microsoft.Extensions.* and EF Core packages from 10.0.11 to 10.0.12 — the floor Aspire 13.6 requires.
 - Microsoft.Data.SqlClient (integration tests and sample only) moved from 6.1.6 to 6.1.8, which takes System.Security.Cryptography.Pkcs 9.0.21 and clears CVE-2026-70162 and CVE-2026-84008.
