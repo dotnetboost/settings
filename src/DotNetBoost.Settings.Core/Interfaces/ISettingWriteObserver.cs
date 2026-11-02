@@ -67,7 +67,23 @@ public sealed record SettingWrite(
     IReadOnlyList<SettingChange> Changes,
     string? Actor,
     string CorrelationId,
-    DateTime OccurredAt);
+    DateTime OccurredAt)
+{
+    /// <summary>
+    /// The settings class the group is defined by, so an observer can read its attributes
+    /// without rebuilding the name-to-type map by scanning assemblies.
+    /// </summary>
+    /// <remarks>
+    /// Always set on a write the library raises. <c>null</c> only on a
+    /// <see cref="SettingWrite"/> constructed elsewhere, such as in a test.
+    /// <para>
+    /// Identify the group by <see cref="GroupName"/>, not by this type's name: moving the class
+    /// to another namespace changes <see cref="Type.FullName"/> but not the rows it reads, so a
+    /// record keyed on the type would split one group's history in two.
+    /// </para>
+    /// </remarks>
+    public Type? GroupType { get; init; }
+}
 
 /// <summary>
 /// Observes every completed write to every settings group. This is the hook an auditing

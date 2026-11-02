@@ -43,6 +43,11 @@ Several observers can be registered; all of them run, in registration order.
 | `Actor` | Who made the change, or `null` for "not captured" |
 | `CorrelationId` | One value per write, so the several changes of one save are identifiable as one edit |
 | `OccurredAt` | UTC timestamp |
+| `GroupType` | The settings class, for reading its attributes |
+
+Identify a group by `GroupName`, not by `GroupType`'s name. Moving the class to another
+namespace changes its full name but not the rows it reads, so anything keyed on the type name
+would split one group's history in two.
 
 Each `SettingChange` is `(PropertyName, OldValue, NewValue, IsRedacted)`. `OldValue` is `null`
 when the property had never been stored.

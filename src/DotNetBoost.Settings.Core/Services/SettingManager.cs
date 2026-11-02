@@ -464,7 +464,10 @@ public sealed partial class SettingManager : ISettingManager
             // One id for the whole write. The ambient Activity when there is one, so the edit
             // joins the surrounding trace rather than being correlatable only with itself.
             CorrelationId: Activity.Current?.Id ?? Guid.NewGuid().ToString("n"),
-            OccurredAt:    DateTime.UtcNow);
+            OccurredAt:    DateTime.UtcNow)
+        {
+            GroupType = map.Type
+        };
 
         foreach (var observer in observers)
         {
@@ -607,7 +610,7 @@ public sealed partial class SettingManager : ISettingManager
             var route = t.GetCustomAttribute<SettingGroupAttribute>()?.Route;
             var name  = SettingGroupAttribute.ResolveName(t);
 
-            return new TypeMap(name, string.IsNullOrWhiteSpace(route) ? name : route, props);
+            return new TypeMap(t, name, string.IsNullOrWhiteSpace(route) ? name : route, props);
         });
 
     private static PropertyMap BuildPropertyMap(PropertyInfo p)
@@ -717,7 +720,7 @@ public sealed partial class SettingManager : ISettingManager
     /// <summary>What this instance's cached copy of a group was loaded under, and when it was last re-checked.</summary>
     private sealed record CacheProbe(string? Version, DateTimeOffset CheckedAt);
 
-    private sealed record TypeMap(string GroupName, string Route, IReadOnlyList<PropertyMap> Properties);
+    private sealed record TypeMap(Type Type, string GroupName, string Route, IReadOnlyList<PropertyMap> Properties);
 
     private sealed record PropertyMap(
         string Name,

@@ -5,6 +5,9 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- `SettingWrite.GroupType`: the settings class a write was made to. An observer that needs the group's attributes no longer has to scan assemblies for a class whose resolved name matches `GroupName`. It is an init property, so code that constructs a `SettingWrite` keeps compiling.
+
 ### Changed
 - Aspire moved from 13.5.2 to 13.6.4, and Microsoft.Extensions.* and EF Core packages from 10.0.11 to 10.0.12 — the floor Aspire 13.6 requires.
 - Microsoft.Data.SqlClient (integration tests and sample only) moved from 6.1.6 to 6.1.8, which takes System.Security.Cryptography.Pkcs 9.0.21 and clears CVE-2026-70162 and CVE-2026-84008.
