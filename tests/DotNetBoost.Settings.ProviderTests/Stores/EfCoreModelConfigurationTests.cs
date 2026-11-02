@@ -43,22 +43,6 @@ public class EfCoreModelConfigurationTests
         Assert.Contains("Microsoft.EntityFrameworkCore.InMemory", Flatten(ex), StringComparison.Ordinal);
     }
 
-    /// <summary>
-    /// The whole purpose of the obsolete alias: a context written against the old name keeps
-    /// compiling and keeps building the same model. Deprecation warning, not a break.
-    /// </summary>
-    [Theory]
-    [InlineData(DatabaseProvider.SqlServer,  "nvarchar(max)")]
-    [InlineData(DatabaseProvider.PostgreSql, "text")]
-    [InlineData(DatabaseProvider.Sqlite,     "TEXT")]
-    public void TheObsoleteName_StillBuildsTheSameModel(DatabaseProvider provider, string expectedColumnType)
-    {
-        Assert.Equal(expectedColumnType, ValueColumnTypeOf(ObsoleteContextFor(provider)));
-
-        // And the same as the new name produces, rather than merely something plausible.
-        Assert.Equal(ValueColumnTypeOf(ContextFor(provider)), ValueColumnTypeOf(ObsoleteContextFor(provider)));
-    }
-
     /// <summary>EF wraps a throw from OnModelCreating, so assert over the whole chain.</summary>
     private static string Flatten(Exception ex)
     {
@@ -116,35 +100,6 @@ public class EfCoreModelConfigurationTests
         protected override void OnModelCreating(ModelBuilder mb)
             => mb.ApplySettings(DatabaseProvider.Sqlite);
     }
-
-    // One context type per provider, as above, each calling the obsolete alias. CS0618 is
-    // suppressed here and nowhere else: these exist precisely to exercise the deprecated name.
-    private static DbContext ObsoleteContextFor(DatabaseProvider provider) => provider switch
-    {
-        DatabaseProvider.SqlServer  => new ObsoleteSqlServerContext(),
-        DatabaseProvider.PostgreSql => new ObsoletePostgresContext(),
-        _                           => new ObsoleteSqliteContext()
-    };
-
-#pragma warning disable CS0618 // Deliberately calling the obsolete alias.
-    private sealed class ObsoleteSqlServerContext : SqliteBackedContext
-    {
-        protected override void OnModelCreating(ModelBuilder mb)
-            => mb.ApplySettingsConfiguration(DatabaseProvider.SqlServer);
-    }
-
-    private sealed class ObsoletePostgresContext : SqliteBackedContext
-    {
-        protected override void OnModelCreating(ModelBuilder mb)
-            => mb.ApplySettingsConfiguration(DatabaseProvider.PostgreSql);
-    }
-
-    private sealed class ObsoleteSqliteContext : SqliteBackedContext
-    {
-        protected override void OnModelCreating(ModelBuilder mb)
-            => mb.ApplySettingsConfiguration(DatabaseProvider.Sqlite);
-    }
-#pragma warning restore CS0618
 
     private sealed class InMemoryContext : DbContext
     {

@@ -2,7 +2,6 @@ using DotNetBoost.Settings.Core;
 using DotNetBoost.Settings.Core.Interfaces;
 using DotNetBoost.Settings.Core.Models;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -19,34 +18,6 @@ public enum DatabaseProvider
 
     /// <summary>SQLite.</summary>
     Sqlite
-}
-
-/// <summary>
-/// No longer required. The EF Core store reads its entities through
-/// <see cref="DbContext.Set{TEntity}()"/>, so a context needs neither this interface nor the
-/// <c>DbSet</c> properties it declares — <c>ApplySettings</c> in <c>OnModelCreating</c> is the
-/// whole registration.
-/// </summary>
-/// <remarks>
-/// Kept for one release so existing contexts keep compiling. Delete the
-/// <c>: ISettingDbContext</c> and the <c>DbSet</c> property; nothing else changes.
-/// </remarks>
-[Obsolete("ISettingDbContext is no longer used. Remove it and the DbSet properties from your " +
-          "DbContext; UseEntityFrameworkCore<TContext>() only needs a DbContext. " +
-          "This interface will be removed in the next release.")]
-public interface ISettingDbContext
-{
-    /// <summary>The persisted settings rows.</summary>
-    DbSet<Setting> Settings { get; }
-
-    /// <summary>Persists pending changes.</summary>
-    Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// Change-tracking entry for an entity. Needed to state the concurrency token a write is
-    /// conditional on. A <see cref="DbContext"/> satisfies this member implicitly.
-    /// </summary>
-    EntityEntry<TEntity> Entry<TEntity>(TEntity entity) where TEntity : class;
 }
 
 /// <summary>Entity mapping for <see cref="Setting"/>, tuned per engine.</summary>
@@ -120,23 +91,6 @@ public static class ModelBuilderExtensions
         ArgumentNullException.ThrowIfNull(context);
         return mb.ApplySettings(ResolveProvider(context.Database.ProviderName));
     }
-
-    /// <summary>
-    /// Renamed to <see cref="ApplySettings(ModelBuilder, DatabaseProvider)"/>.
-    /// </summary>
-    /// <remarks>
-    /// Kept for one release so existing contexts keep compiling, the same way
-    /// <see cref="ISettingDbContext"/> is. The old name described the mechanism rather than
-    /// the library, which read as meaningful next to the <c>ApplyMedia()</c> and
-    /// <c>ApplyMultiLingual()</c> calls it usually sits beside. It was not.
-    /// </remarks>
-    [Obsolete(RenamedMessage)]
-    public static ModelBuilder ApplySettingsConfiguration(this ModelBuilder mb, DatabaseProvider provider)
-        => mb.ApplySettings(provider);
-
-    private const string RenamedMessage =
-        "Renamed to ApplySettings, to match ApplyMedia and ApplyMultiLingual. " +
-        "This alias will be removed in the next release.";
 
     /// <summary>
     /// Maps an EF Core provider assembly name onto the engine whose column types and
