@@ -48,12 +48,14 @@ builder.Services.AddDbContext<AppDbContext>(opt =>
 //   telemetry — Npgsql's ActivitySource and Meter, so a trace on the dashboard shows the
 //               SQL a request ran instead of stopping at the HTTP span, and the Metrics
 //               page carries the connection-pool counters.
+// The DotNetBoost.Settings meter is this library's own, not Npgsql's: it counts write observers
+// and change handlers that threw, which are otherwise only a log line.
 builder.Services.AddHealthChecks()
     .AddDbContextCheck<AppDbContext>();
 
 builder.Services.AddOpenTelemetry()
     .WithTracing(tracing => tracing.AddSource("Npgsql"))
-    .WithMetrics(metrics => metrics.AddMeter("Npgsql"));
+    .WithMetrics(metrics => metrics.AddMeter("Npgsql", "DotNetBoost.Settings"));
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  Storage provider — ALTERNATIVE: SQL Server (Entity Framework Core)

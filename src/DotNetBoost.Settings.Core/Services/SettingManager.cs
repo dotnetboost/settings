@@ -55,6 +55,12 @@ public sealed partial class SettingManager : ISettingManager
     private ConcurrentDictionary<string, CacheProbe> Probes => ProbesByCache.GetOrCreateValue(_cache);
 
     /// <summary>
+    /// Resolved when something fails rather than in the constructor, the way observers and
+    /// handlers are, so the public constructor stays as it is and the success path pays nothing.
+    /// </summary>
+    private SettingMetrics Metrics => _sp.GetService<SettingMetrics>() ?? SettingMetrics.Shared;
+
+    /// <summary>
     /// Creates a manager. <paramref name="encryptor"/>, <paramref name="actorAccessor"/>,
     /// <paramref name="signal"/> and <paramref name="options"/> are optional: omitting them
     /// disables encryption, leaves <see cref="SettingWrite.Actor"/> unset, keeps cache
@@ -478,6 +484,7 @@ public sealed partial class SettingManager : ISettingManager
             catch (Exception ex)
             {
                 LogWriteObserverFailed(_logger, observer.GetType().Name, map.GroupName, ex);
+                Metrics.WriteObserverFailed(observer.GetType(), map.GroupName, ex);
             }
         }
     }
@@ -541,6 +548,7 @@ public sealed partial class SettingManager : ISettingManager
             catch (Exception ex)
             {
                 LogChangeHandlerFailed(_logger, handler.GetType().Name, groupName, ex);
+                Metrics.ChangeHandlerFailed(handler.GetType(), groupName, ex);
             }
         }
     }

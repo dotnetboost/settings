@@ -39,6 +39,7 @@ the wrong one is mostly a matter of fighting the data you are handed.
 
 Both are **in-process only**, and both have the same failure policy: **an exception is logged and
 swallowed**, so neither can fail a write that has already committed, and one failing handler
-never skips the ones after it.
+never skips the ones after it. Each failure is also counted on the `DotNetBoost.Settings` meter;
+see [Write notifications](write-notifications.md#failure-policy).
 
 Registering both is normal — they are not alternatives.

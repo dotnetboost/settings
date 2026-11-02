@@ -5,6 +5,7 @@ using DotNetBoost.Settings.Core.Services;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using System.Diagnostics.Metrics;
 using System.Security.Cryptography;
 
 namespace DotNetBoost.Settings.UnitTests;
@@ -246,6 +247,86 @@ public class SettingWriteObserverTests
         Assert.Equal("a", (await store.GetAsync(nameof(ObservedSettings), nameof(ObservedSettings.Host)))!.Value);
     }
 
+    /// <summary>
+    /// A swallowed exception is still logged; the counter is what makes a rate of them visible
+    /// without anyone reading logs.
+    /// </summary>
+    [Fact]
+    public async Task Observer_ThatThrows_IsCounted_WithItsTypeGroupAndError()
+    {
+        using var metrics = new MetricsCapture();
+        var services = new ServiceCollection();
+        services.AddScoped<ISettingWriteObserver, ThrowingObserver>();
+        var mgr = Build(services, metrics);
+
+        await mgr.For<ObservedSettings>().SetAsync(new ObservedSettings { Host = "a" });
+
+        var m = Assert.Single(metrics.Measurements);
+        Assert.Equal(SettingMetrics.WriteObserverFailuresName, m.Instrument);
+        Assert.Equal(1, m.Value);
+        Assert.Equal(nameof(ThrowingObserver),                 m.Tags[SettingMetrics.ObserverTag]);
+        Assert.Equal(nameof(ObservedSettings),                 m.Tags[SettingMetrics.GroupTag]);
+        Assert.Equal(typeof(InvalidOperationException).FullName, m.Tags[SettingMetrics.ErrorTag]);
+    }
+
+    [Fact]
+    public async Task ChangeHandler_ThatThrows_IsCounted_WithItsTypeGroupAndError()
+    {
+        using var metrics = new MetricsCapture();
+        var services = new ServiceCollection();
+        services.AddScoped<ISettingChangedHandler<ObservedSettings>, ThrowingChangeHandler>();
+        var mgr = Build(services, metrics);
+
+        var ex = await Record.ExceptionAsync(
+            () => mgr.For<ObservedSettings>().SetAsync(new ObservedSettings { Host = "a" }));
+
+        Assert.Null(ex);
+        var m = Assert.Single(metrics.Measurements);
+        Assert.Equal(SettingMetrics.ChangeHandlerFailuresName, m.Instrument);
+        Assert.Equal(nameof(ThrowingChangeHandler),            m.Tags[SettingMetrics.HandlerTag]);
+        Assert.Equal(nameof(ObservedSettings),                 m.Tags[SettingMetrics.GroupTag]);
+        Assert.Equal(typeof(InvalidOperationException).FullName, m.Tags[SettingMetrics.ErrorTag]);
+    }
+
+    [Fact]
+    public async Task Write_WhoseObserversAndHandlersSucceed_CountsNothing()
+    {
+        using var metrics = new MetricsCapture();
+        var services = new ServiceCollection();
+        services.AddScoped<ISettingWriteObserver, RecordingObserver>();
+        var mgr = Build(services, metrics);
+
+        await mgr.For<ObservedSettings>().SetAsync(new ObservedSettings { Host = "a" });
+        await mgr.For<ObservedSettings>().ClearAsync();
+
+        Assert.Empty(metrics.Measurements);
+    }
+
+    /// <summary>
+    /// <c>AddSettings()</c> takes the container's meter factory when there is one, so a host's
+    /// measurements stay on its own meter, and still resolves when there is none.
+    /// </summary>
+    [Fact]
+    public void AddSettings_CreatesTheMeter_FromTheContainersFactory_WhenThereIsOne()
+    {
+        using var metrics = new MetricsCapture();
+
+        var withFactory = new ServiceCollection()
+            .AddSingleton<IMeterFactory>(metrics.Factory);
+        withFactory.AddSettings();
+        using var sp = withFactory.BuildServiceProvider();
+
+        sp.GetRequiredService<SettingMetrics>()
+            .WriteObserverFailed(typeof(ThrowingObserver), "g", new InvalidOperationException());
+        Assert.Single(metrics.Measurements);
+
+        var withoutFactory = new ServiceCollection();
+        withoutFactory.AddSettings();
+        using var bare = withoutFactory.BuildServiceProvider();
+
+        Assert.NotNull(bare.GetRequiredService<SettingMetrics>());
+    }
+
     [Fact]
     public async Task Actor_IsNull_WhenNoAccessorIsRegistered()
     {
@@ -308,6 +389,13 @@ public class SettingWriteObserverTests
         return (mgr, store, observer);
     }
 
+    private static SettingManager Build(ServiceCollection services, MetricsCapture metrics)
+    {
+        services.AddSingleton(new SettingMetrics(metrics.Factory));
+        return new SettingManager(new FakeStore(), new NoCache(), services.BuildServiceProvider(),
+            NullLogger<SettingManager>.Instance);
+    }
+
     [SettingGroup("observed")]
     public class ObservedSettings
     {
@@ -335,6 +423,64 @@ public class SettingWriteObserverTests
         {
             WasCalled = true;
             throw new InvalidOperationException("observer is down");
+        }
+    }
+
+    private sealed class ThrowingChangeHandler : ISettingChangedHandler<ObservedSettings>
+    {
+        public Task OnChangedAsync(ObservedSettings previous, ObservedSettings current, CancellationToken ct = default)
+            => throw new InvalidOperationException("handler is down");
+    }
+
+    /// <summary>
+    /// Collects measurements from meters made by its own factory only. Listening by meter name
+    /// would also catch measurements from tests running in parallel.
+    /// </summary>
+    private sealed class MetricsCapture : IDisposable
+    {
+        private readonly MeterListener _listener = new();
+
+        public TestMeterFactory Factory { get; } = new();
+        public List<(string Instrument, long Value, Dictionary<string, object?> Tags)> Measurements { get; } = [];
+
+        public MetricsCapture()
+        {
+            _listener.InstrumentPublished = (instrument, listener) =>
+            {
+                if (ReferenceEquals(instrument.Meter.Scope, Factory))
+                    listener.EnableMeasurementEvents(instrument);
+            };
+            _listener.SetMeasurementEventCallback<long>((instrument, value, tags, _) =>
+            {
+                var bag = new Dictionary<string, object?>(StringComparer.Ordinal);
+                foreach (var tag in tags) bag[tag.Key] = tag.Value;
+                lock (Measurements) Measurements.Add((instrument.Name, value, bag));
+            });
+            _listener.Start();
+        }
+
+        public void Dispose()
+        {
+            _listener.Dispose();
+            Factory.Dispose();
+        }
+    }
+
+    private sealed class TestMeterFactory : IMeterFactory
+    {
+        private readonly List<Meter> _meters = [];
+
+        public Meter Create(MeterOptions options)
+        {
+            options.Scope = this;
+            var meter = new Meter(options);
+            _meters.Add(meter);
+            return meter;
+        }
+
+        public void Dispose()
+        {
+            foreach (var meter in _meters) meter.Dispose();
         }
     }
 
