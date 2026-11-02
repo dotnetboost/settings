@@ -183,7 +183,8 @@ builder.Services.AddSettings()
     .UseAesEncryption(key)                          // encrypt [Sensitive] properties
     .UseFluentValidation(typeof(Program).Assembly)  // reject invalid values
     .OnChanged<MailSettings, MailSettingsChanged>() // react when a value changes
-    .UseWriteObserver<MyWriteObserver>()            // record or forward every write
+    .UseWriteParticipant<MyAuditParticipant>()      // commit an audit entry with every write
+    .UseWriteObserver<MyWriteObserver>()            // forward every committed write
     .Build();
 ```
 
@@ -198,7 +199,7 @@ builder.Services.AddSettings()
 | Run on several servers and keep their caches in step | [Caching](https://github.com/dotnetboost/settings/blob/main/docs/caching.md#running-on-more-than-one-instance) |
 | Run code when a setting changes | [Change notifications](https://github.com/dotnetboost/settings/blob/main/docs/change-notifications.md) |
 | Stop two people overwriting each other's edits | [Reading & writing](https://github.com/dotnetboost/settings/blob/main/docs/reading-and-writing.md#concurrent-writes) |
-| Record or forward every write (and who made it) | [Write notifications](https://github.com/dotnetboost/settings/blob/main/docs/write-notifications.md) |
+| Audit or forward every write (and who made it) | [Write notifications](https://github.com/dotnetboost/settings/blob/main/docs/write-notifications.md) |
 | Generate a form from the class (list groups, read the schema) | [Discovery endpoints](https://github.com/dotnetboost/settings/blob/main/docs/discovery-endpoints.md) |
 | Give admins a web UI to edit settings | [Dashboard](https://github.com/dotnetboost/settings/blob/main/docs/dashboard.md) |
 | See every builder option | [Configuration reference](https://github.com/dotnetboost/settings/blob/main/docs/configuration-reference.md) |

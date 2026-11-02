@@ -15,8 +15,9 @@ public sealed class SettingBuilder
     /// <summary>The service collection being configured. Providers add their registrations here.</summary>
     public IServiceCollection Services { get; }
 
-    internal bool    ProviderConfigured { get; set; }
-    internal string? ProviderName       { get; set; }
+    internal bool    ProviderConfigured        { get; set; }
+    internal string? ProviderName              { get; set; }
+    internal bool    SupportsWriteParticipants { get; set; }
 
     /// <summary>
     /// The options instance handed to <c>SettingManager</c> through DI. Builder methods mutate
@@ -52,8 +53,9 @@ public sealed class SettingBuilder
     /// seam open.
     /// </remarks>
     /// <exception cref="InvalidOperationException">
-    /// No provider is configured, a <c>[SettingGroup]</c> class breaks a naming rule, or a
-    /// settings group has two different projectors registered.
+    /// No provider is configured, a <c>[SettingGroup]</c> class breaks a naming rule, a
+    /// settings group has two different projectors registered, or a write participant is
+    /// registered for a provider that cannot commit what it enlists.
     /// </exception>
     public IServiceCollection Build()
     {
@@ -66,6 +68,7 @@ public sealed class SettingBuilder
 
         SettingBuilderValidator.Validate(AppDomain.CurrentDomain.GetAssemblies());
         SettingBuilderValidator.ValidateProjectors(Services);
+        SettingBuilderValidator.ValidateWriteParticipants(Services, ProviderName, SupportsWriteParticipants);
         return Services;
     }
 }
@@ -74,10 +77,26 @@ public sealed class SettingBuilder
 public static class SettingBuilderGuard
 {
     /// <summary>
-    /// Records <paramref name="providerName"/> as the builder's provider.
+    /// Records <paramref name="providerName"/> as the builder's provider, one that does not
+    /// accept write participants.
     /// </summary>
     /// <exception cref="InvalidOperationException">A provider is already configured.</exception>
     public static void EnsureProviderNotConfigured(SettingBuilder builder, string providerName)
+        => EnsureProviderNotConfigured(builder, providerName, supportsWriteParticipants: false);
+
+    /// <summary>
+    /// Records <paramref name="providerName"/> as the builder's provider.
+    /// </summary>
+    /// <param name="builder">The builder being configured.</param>
+    /// <param name="providerName">Named in error messages.</param>
+    /// <param name="supportsWriteParticipants">
+    /// Whether the provider's store implements <see cref="IEnlistingSettingStore"/>, so an
+    /// <see cref="ISettingWriteParticipant"/> can enlist in its writes.
+    /// <see cref="SettingBuilder.Build"/> refuses a participant when this is <c>false</c>.
+    /// </param>
+    /// <exception cref="InvalidOperationException">A provider is already configured.</exception>
+    public static void EnsureProviderNotConfigured(
+        SettingBuilder builder, string providerName, bool supportsWriteParticipants)
     {
         ArgumentNullException.ThrowIfNull(builder);
         ArgumentException.ThrowIfNullOrWhiteSpace(providerName);
@@ -89,14 +108,15 @@ public static class SettingBuilderGuard
                 $"Cannot also configure '{providerName}'.");
         }
 
-        builder.ProviderConfigured = true;
-        builder.ProviderName       = providerName;
+        builder.ProviderConfigured        = true;
+        builder.ProviderName              = providerName;
+        builder.SupportsWriteParticipants = supportsWriteParticipants;
     }
 }
 
 /// <summary>
 /// Startup validation for <c>[SettingGroup]</c> classes — blank routes, blank explicit names,
-/// duplicate group names or routes — and for projector registrations. Run by
+/// duplicate group names or routes — and for projector and write-participant registrations. Run by
 /// <see cref="SettingBuilder.Build"/>.
 /// </summary>
 public static class SettingBuilderValidator
@@ -169,6 +189,42 @@ public static class SettingBuilderValidator
         }
 
         throw new InvalidOperationException(sb.ToString());
+    }
+
+    /// <summary>
+    /// Refuses a write participant for a provider that has not declared it can commit what
+    /// participants enlist. Running them anyway would look like an audit trail and not be one —
+    /// the same trap as the <c>SettingAudits</c> table the Dapper bootstrap used to create and
+    /// nothing wrote to.
+    /// </summary>
+    /// <param name="services">The registrations to check.</param>
+    /// <param name="providerName">The configured provider, named in the message.</param>
+    /// <param name="providerSupportsParticipants">
+    /// What the provider declared through <see cref="SettingBuilderGuard"/>.
+    /// </param>
+    /// <exception cref="InvalidOperationException">
+    /// A participant is registered and the provider does not support them; the message names
+    /// the participants.
+    /// </exception>
+    public static void ValidateWriteParticipants(
+        IServiceCollection services, string? providerName, bool providerSupportsParticipants)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
+        if (providerSupportsParticipants) return;
+
+        var participants = services
+            .Where(d => d.ServiceType == typeof(ISettingWriteParticipant))
+            .Select(d => d.ImplementationType?.Name ?? "(factory registration)")
+            .ToList();
+
+        if (participants.Count == 0) return;
+
+        throw new InvalidOperationException(
+            $"The '{providerName}' settings provider cannot commit what a write participant enlists " +
+            $"together with the write, so it does not accept participants. Registered: " +
+            $"{string.Join(", ", participants)}. Use the Entity Framework Core provider, or an " +
+            "ISettingWriteObserver if the work does not have to commit with the write.");
     }
 
     /// <summary>

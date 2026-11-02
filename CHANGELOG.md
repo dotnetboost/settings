@@ -8,10 +8,17 @@ This project follows [Semantic Versioning](https://semver.org/).
 ### Added
 - `SettingWrite.GroupType`: the settings class a write was made to. An observer that needs the group's attributes no longer has to scan assemblies for a class whose resolved name matches `GroupName`. It is an init property, so code that constructs a `SettingWrite` keeps compiling.
 - The library's first metrics, on a `DotNetBoost.Settings` meter: `dotnetboost.settings.write_observer.failures` and `dotnetboost.settings.change_handler.failures`, each tagged with the implementation's class name, the group and `error.type`. Observer and handler exceptions are still logged and swallowed; until now the log line was the only trace of them. The meter is created through the container's `IMeterFactory` when there is one.
+- `ISettingWriteParticipant` and `.UseWriteParticipant<T>()`: a hook that runs inside every write, before the store saves, for work that must commit with the write or not at all — an audit entry. A participant enlists entities through `EfCoreSettingWriteScope.Add`, and the Entity Framework Core store's own save commits them with the rows. An exception aborts the write: the store is not called, the cache keeps its entry, and what was enlisted is discarded. Participants and observers receive the same `SettingWrite` instance, so they share a correlation id. See [Write notifications](docs/write-notifications.md#isettingwriteparticipant).
+- `IEnlistingSettingStore`, the store capability participants require, and a `SettingBuilderGuard.EnsureProviderNotConfigured` overload through which a provider declares it. Only Entity Framework Core does. `Build()` refuses a participant for Dapper or MongoDB, and a write refuses one at run time for a store that cannot enlist, rather than run it with no atomicity.
 
 ### Changed
+- **A clear now reports what it deleted.** A `Cleared` `SettingWrite` used to carry an empty `Changes`; it now lists one `SettingChange` per deleted row, with the stored value as `OldValue` and a null `NewValue`, redacted for `[Sensitive]` properties and for any encrypted row. The manager reads the group before deleting to do it, but only when a participant or observer is registered. An observer that relied on `Changes` being empty for a clear should check `Kind` instead.
+- `EfCoreSettingStore.DeleteGroupAsync`, when a participant has enlisted something, runs the delete and a `SaveChangesAsync` in one transaction: the caller's if there is one, otherwise its own inside the context's execution strategy, so it works under `EnableRetryOnFailure`. With nothing enlisted it is the single `ExecuteDeleteAsync` it was.
 - Aspire moved from 13.5.2 to 13.6.4, and Microsoft.Extensions.* and EF Core packages from 10.0.11 to 10.0.12 — the floor Aspire 13.6 requires.
 - Microsoft.Data.SqlClient (integration tests and sample only) moved from 6.1.6 to 6.1.8, which takes System.Security.Cryptography.Pkcs 9.0.21 and clears CVE-2026-70162 and CVE-2026-84008.
+
+### Fixed
+- A failed Entity Framework Core write no longer leaves its `Setting` entities tracked. After a `SettingConcurrencyException` the rows the store had modified or added stayed in the change tracker of the scoped, usually shared, context, so the application's next unrelated `SaveChangesAsync` wrote the losing value over the winner's. They are now detached when the save fails.
 
 ## [1.0.0-preview.2] — 2026-10-10
 

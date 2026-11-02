@@ -15,6 +15,7 @@
 | `.UseAesEncryption(key, retiredKeys...)` | Core | Enable built-in AES-256-GCM encryption; retired keys decrypt only |
 | `.IgnoreDecryptionFailures()` | Core | Fall back to defaults instead of throwing when a value will not decrypt |
 | `.UseCustomEncryption<TEncryptor>()` | Core | Plug in a custom encryptor |
+| `.UseWriteParticipant<TParticipant>()` | Core | Enlist work that commits with every write, or aborts it; Entity Framework Core only |
 | `.UseWriteObserver<TObserver>()` | Core | Observe every completed write; several may be registered |
 | `.UseLoggingWriteObserver()` | Core | Log one line per write — property names, never values |
 | `.UseActorAccessor<TAccessor>()` | Core | Supply who is making the change |

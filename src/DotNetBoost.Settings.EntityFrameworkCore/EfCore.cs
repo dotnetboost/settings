@@ -160,13 +160,49 @@ public static class ModelBuilderExtensions
 
 /// <summary>EF Core-backed <see cref="ISettingStore"/>.</summary>
 /// <remarks>
+/// <para>
 /// Takes a plain <see cref="DbContext"/> and reaches its entities through
 /// <see cref="DbContext.Set{TEntity}()"/>, so a consuming context needs no interface and no
 /// <c>DbSet</c> properties — only <c>ApplySettings</c> in <c>OnModelCreating</c>.
+/// </para>
+/// <para>
+/// <b>The context is shared.</b> A write calls <c>SaveChangesAsync</c> on it, which saves
+/// everything tracked on it, the application's own pending changes included. That is what lets
+/// an <see cref="ISettingWriteParticipant"/> commit with the write: it enlists through
+/// <see cref="EfCoreSettingWriteScope"/>, and the store's save carries it. A clear saves only
+/// when something was enlisted, as part of the same transaction as the delete.
+/// </para>
 /// </remarks>
-/// <param name="db">The context the settings entities are mapped on.</param>
-public sealed class EfCoreSettingStore(DbContext db) : ISettingStore
+public sealed class EfCoreSettingStore : IEnlistingSettingStore
 {
+    private readonly DbContext                 db;
+    private readonly EfCoreSettingWriteScope?  writeScope;
+
+    /// <summary>A store with no write scope, so no participant can enlist in its writes.</summary>
+    /// <param name="db">The context the settings entities are mapped on.</param>
+    public EfCoreSettingStore(DbContext db) : this(db, null) { }
+
+    /// <summary>A store whose writes commit what participants enlist in <paramref name="writeScope"/>.</summary>
+    /// <param name="db">The context the settings entities are mapped on.</param>
+    /// <param name="writeScope">Where participants enlist. Must wrap <paramref name="db"/>.</param>
+    /// <exception cref="ArgumentException">
+    /// <paramref name="writeScope"/> wraps a different context, whose entities this store's save
+    /// would never reach.
+    /// </exception>
+    public EfCoreSettingStore(DbContext db, EfCoreSettingWriteScope? writeScope)
+    {
+        this.db = db ?? throw new ArgumentNullException(nameof(db));
+
+        if (writeScope is not null && !ReferenceEquals(writeScope.Context, db))
+        {
+            throw new ArgumentException(
+                "The write scope wraps a different DbContext instance from the store's, so nothing " +
+                "enlisted in it would be saved with the settings.", nameof(writeScope));
+        }
+
+        this.writeScope = writeScope;
+    }
+
     private DbSet<Setting> Settings => db.Set<Setting>();
 
     /// <inheritdoc/>
@@ -203,40 +239,66 @@ public sealed class EfCoreSettingStore(DbContext db) : ISettingStore
         var existing = await Settings.Where(x => x.Group == group && keys.Contains(x.Key)).ToListAsync(ct).ConfigureAwait(false);
         var byKey = existing.ToDictionary(x => x.Key, StringComparer.Ordinal);
 
-        foreach (var item in list)
-        {
-            if (byKey.TryGetValue(item.Key, out var e))
-            {
-                // OriginalValue is what EF puts in the UPDATE's WHERE clause. Setting it to the
-                // token the caller read — rather than the one just loaded — is what makes the
-                // write conditional on nothing having changed in between.
-                if (item.RowVersion is not null)
-                    db.Entry(e).Property(x => x.RowVersion).OriginalValue = item.RowVersion;
-
-                e.Value       = item.Value;
-                e.Type        = item.Type;
-                e.IsEncrypted = item.IsEncrypted;
-                e.UpdatedAt   = item.UpdatedAt;
-                e.UpdatedBy   = item.UpdatedBy;
-                e.RowVersion  = Setting.NewRowVersion();
-            }
-            else
-            {
-                item.RowVersion = Setting.NewRowVersion();
-                await Settings.AddAsync(item, ct).ConfigureAwait(false);
-            }
-        }
+        // Every entity this write leaves tracked, so a failed write can take them all back.
+        var touched = new List<Setting>(existing);
 
         try
         {
+            foreach (var item in list)
+            {
+                if (byKey.TryGetValue(item.Key, out var e))
+                {
+                    // OriginalValue is what EF puts in the UPDATE's WHERE clause. Setting it to the
+                    // token the caller read — rather than the one just loaded — is what makes the
+                    // write conditional on nothing having changed in between.
+                    if (item.RowVersion is not null)
+                        db.Entry(e).Property(x => x.RowVersion).OriginalValue = item.RowVersion;
+
+                    e.Value       = item.Value;
+                    e.Type        = item.Type;
+                    e.IsEncrypted = item.IsEncrypted;
+                    e.UpdatedAt   = item.UpdatedAt;
+                    e.UpdatedBy   = item.UpdatedBy;
+                    e.RowVersion  = Setting.NewRowVersion();
+                }
+                else
+                {
+                    item.RowVersion = Setting.NewRowVersion();
+                    await Settings.AddAsync(item, ct).ConfigureAwait(false);
+                    touched.Add(item);
+                }
+            }
+
             await db.SaveChangesAsync(ct).ConfigureAwait(false);
         }
         catch (DbUpdateConcurrencyException ex)
         {
+            Detach(touched);
             var clash = ex.Entries.Select(e => e.Entity).OfType<Setting>().FirstOrDefault();
             throw new SettingConcurrencyException(clash?.Group ?? group, clash?.Key ?? "?", ex);
         }
+        catch
+        {
+            Detach(touched);
+            throw;
+        }
+
+        writeScope?.Committed();
     }
+
+    /// <summary>
+    /// Takes back what a failed write left tracked. The context is scoped and usually the
+    /// application's own, so a row left modified or added would otherwise be saved by its next
+    /// unrelated <c>SaveChangesAsync</c> — writing the very value whose write just failed.
+    /// </summary>
+    private void Detach(List<Setting> touched)
+    {
+        foreach (var entity in touched)
+            db.Entry(entity).State = EntityState.Detached;
+    }
+
+    /// <inheritdoc/>
+    public void DiscardEnlisted() => writeScope?.Discard();
 
     /// <inheritdoc/>
     public async Task DeleteAsync(string group, string key, CancellationToken ct = default)
@@ -250,10 +312,50 @@ public sealed class EfCoreSettingStore(DbContext db) : ISettingStore
     }
 
     /// <inheritdoc/>
-    public Task DeleteGroupAsync(string group, CancellationToken ct = default)
+    /// <remarks>
+    /// <para>
+    /// With nothing enlisted this is one <c>ExecuteDeleteAsync</c>, which bypasses the change
+    /// tracker and saves nothing else.
+    /// </para>
+    /// <para>
+    /// With something enlisted, the delete and a <c>SaveChangesAsync</c> for it run in one
+    /// transaction. The caller's transaction when there is one, which the caller then commits
+    /// or rolls back. Otherwise one of its own, inside the context's execution strategy: under
+    /// a retrying strategy (<c>EnableRetryOnFailure</c>) a transaction opened outside it throws.
+    /// The save does not accept its changes until the transaction commits, so a retry saves
+    /// them again rather than skipping them.
+    /// </para>
+    /// </remarks>
+    public async Task DeleteGroupAsync(string group, CancellationToken ct = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(group);
-        return Settings.Where(x => x.Group == group).ExecuteDeleteAsync(ct);
+
+        if (writeScope is not { HasEnlisted: true })
+        {
+            await Settings.Where(x => x.Group == group).ExecuteDeleteAsync(ct).ConfigureAwait(false);
+            return;
+        }
+
+        if (db.Database.CurrentTransaction is not null)
+        {
+            await Settings.Where(x => x.Group == group).ExecuteDeleteAsync(ct).ConfigureAwait(false);
+            await db.SaveChangesAsync(ct).ConfigureAwait(false);
+        }
+        else
+        {
+            var strategy = db.Database.CreateExecutionStrategy();
+            await strategy.ExecuteAsync(async () =>
+            {
+                await using var tx = await db.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
+                await Settings.Where(x => x.Group == group).ExecuteDeleteAsync(ct).ConfigureAwait(false);
+                await db.SaveChangesAsync(acceptAllChangesOnSuccess: false, ct).ConfigureAwait(false);
+                await tx.CommitAsync(ct).ConfigureAwait(false);
+            }).ConfigureAwait(false);
+
+            db.ChangeTracker.AcceptAllChanges();
+        }
+
+        writeScope.Committed();
     }
 
 
