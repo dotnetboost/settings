@@ -14,6 +14,8 @@
    or Redis)       Dapper /        or custom)          or FluentValidation)
                    MongoDB)
                              │
+      ISettingWriteParticipant (inside the write: enlists work that
+                             │  commits with it, or aborts it)
                  ┌───────────┴────────────┐
       ISettingChangedHandler<T>    ISettingWriteObserver
       (typed, one group,           (untyped, every group: the

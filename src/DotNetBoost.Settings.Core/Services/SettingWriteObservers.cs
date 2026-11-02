@@ -25,7 +25,8 @@ internal sealed class NullSettingActorAccessor : ISettingActorAccessor
 /// also the part that is safe to keep.
 /// <para>
 /// This exists so the write hook is not an empty port. For a real trail — queryable, with
-/// retention — implement <see cref="ISettingWriteObserver"/> over your own store.
+/// retention, and committed with the write — implement <see cref="ISettingWriteParticipant"/>
+/// over your own table.
 /// </para>
 /// </remarks>
 public sealed partial class LoggingSettingWriteObserver : ISettingWriteObserver

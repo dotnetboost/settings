@@ -8,8 +8,9 @@ public enum SettingWriteKind
 
     /// <summary>
     /// Every row in the group was deleted by <c>ClearAsync</c>.
-    /// <see cref="SettingWrite.Changes"/> is empty — the operation is group-wide, and nothing
-    /// is read back to enumerate what was there.
+    /// <see cref="SettingWrite.Changes"/> lists one entry per deleted row, with the value it
+    /// held as <see cref="SettingChange.OldValue"/> and a <c>null</c>
+    /// <see cref="SettingChange.NewValue"/>. Empty when the group had nothing stored.
     /// </summary>
     Cleared
 }
@@ -21,7 +22,8 @@ public enum SettingWriteKind
 /// Always <c>null</c> when <paramref name="IsRedacted"/> is set.
 /// </param>
 /// <param name="NewValue">
-/// The value as written. Always <c>null</c> when <paramref name="IsRedacted"/> is set.
+/// The value as written. Always <c>null</c> when <paramref name="IsRedacted"/> is set, and for
+/// a <see cref="SettingWriteKind.Cleared"/> write, which writes nothing.
 /// </param>
 /// <param name="IsRedacted">
 /// Whether the property is <c>[Sensitive]</c>. Its values are withheld rather than reported:
@@ -35,7 +37,11 @@ public sealed record SettingChange(
     string? NewValue,
     bool IsRedacted);
 
-/// <summary>A completed write to one settings group.</summary>
+/// <summary>
+/// One write to one settings group. An <see cref="ISettingWriteParticipant"/> is handed it
+/// before the store commits, and every <see cref="ISettingWriteObserver"/> the same instance
+/// after.
+/// </summary>
 /// <param name="GroupName">
 /// The persistence key the group's rows are stored under — the <c>Name</c> on
 /// <c>[SettingGroup]</c>, or the class name when none is set.
@@ -46,9 +52,9 @@ public sealed record SettingChange(
 /// </param>
 /// <param name="Kind">Whether properties were written or the whole group was cleared.</param>
 /// <param name="Changes">
-/// One entry per property that actually changed; empty when <paramref name="Kind"/> is
-/// <see cref="SettingWriteKind.Cleared"/>. A write that changed nothing raises no
-/// <see cref="SettingWrite"/> at all.
+/// One entry per property that actually changed, or, when <paramref name="Kind"/> is
+/// <see cref="SettingWriteKind.Cleared"/>, one per row deleted. A set that changed nothing
+/// raises no <see cref="SettingWrite"/> at all.
 /// </param>
 /// <param name="Actor">
 /// Who made the change, from the registered <see cref="ISettingActorAccessor"/>. <c>null</c>
@@ -59,7 +65,9 @@ public sealed record SettingChange(
 /// identifiable as one edit. The ambient <c>Activity</c> id when there is one, otherwise a
 /// fresh value.
 /// </param>
-/// <param name="OccurredAt">UTC timestamp of the write.</param>
+/// <param name="OccurredAt">
+/// UTC timestamp of the write, taken just before the store is called.
+/// </param>
 public sealed record SettingWrite(
     string GroupName,
     string Route,
@@ -86,8 +94,8 @@ public sealed record SettingWrite(
 }
 
 /// <summary>
-/// Observes every completed write to every settings group. This is the hook an auditing
-/// package, a webhook publisher, a search indexer or a distributed cache signal implements.
+/// Observes every completed write to every settings group. This is the hook a webhook
+/// publisher, a search indexer or a distributed cache signal implements.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -102,6 +110,10 @@ public sealed record SettingWrite(
 /// <para>
 /// In-process only. Several observers may be registered; all are invoked in registration
 /// order.
+/// </para>
+/// <para>
+/// For work that must commit together with the write, or not at all — an audit entry —
+/// implement <see cref="ISettingWriteParticipant"/> instead.
 /// </para>
 /// <para>
 /// This is the untyped half of the notification pair. Use

@@ -179,10 +179,11 @@ public class SettingWriteObserverTests
     /// <summary>
     /// The reason <see cref="SettingWriteKind"/> exists. Deleting every row in a group is the
     /// most destructive thing the library does, and under the old audit trail it was the one
-    /// operation that recorded nothing at all.
+    /// operation that recorded nothing at all. It reports what it deleted, so an audit of a
+    /// clear can say more than that it happened.
     /// </summary>
     [Fact]
-    public async Task Clear_RaisesAClearedNotification_WithNoChanges()
+    public async Task Clear_RaisesAClearedNotification_ListingWhatItDeleted()
     {
         var (mgr, _, observer) = Build();
 
@@ -193,8 +194,40 @@ public class SettingWriteObserverTests
 
         var write = Assert.Single(observer.Writes);
         Assert.Equal(SettingWriteKind.Cleared, write.Kind);
-        Assert.Empty(write.Changes);
         Assert.Equal(nameof(ObservedSettings), write.GroupName);
+        Assert.Equal(
+            [
+                new SettingChange(nameof(ObservedSettings.Host), "a",  null, IsRedacted: false),
+                new SettingChange(nameof(ObservedSettings.Port), "25", null, IsRedacted: false)
+            ],
+            write.Changes);
+    }
+
+    [Fact]
+    public async Task Clear_RedactsSensitiveValues_ItDeleted()
+    {
+        var (mgr, _, observer) = Build();
+
+        await mgr.For<ObservedSettings>().SetAsync(new ObservedSettings { Secret = "s3cret" });
+        observer.Writes.Clear();
+
+        await mgr.For<ObservedSettings>().ClearAsync();
+
+        var change = Single(observer, nameof(ObservedSettings.Secret));
+        Assert.True(change.IsRedacted);
+        Assert.Null(change.OldValue);
+    }
+
+    [Fact]
+    public async Task Clear_OfAnEmptyGroup_StillNotifies_WithNoChanges()
+    {
+        var (mgr, _, observer) = Build();
+
+        await mgr.For<ObservedSettings>().ClearAsync();
+
+        var write = Assert.Single(observer.Writes);
+        Assert.Equal(SettingWriteKind.Cleared, write.Kind);
+        Assert.Empty(write.Changes);
     }
 
     /// <summary>

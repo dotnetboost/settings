@@ -258,14 +258,17 @@ public sealed partial class SettingManager : ISettingManager
             return;
         }
 
-        await _store.UpsertManyAsync(rows, ct).ConfigureAwait(false);
+        // One notification for the whole write, not one per row: the N properties of a single
+        // save are one edit, and the shared correlation id is what says so.
+        var listeners = ResolveListeners();
+        var write     = listeners.Any ? NewWrite(map, SettingWriteKind.Updated, BuildChanges(map, rows, prevMap)) : null;
+
+        await RunParticipantsAsync(listeners, write, ct).ConfigureAwait(false);
+        await CommitAsync(() => _store.UpsertManyAsync(rows, ct)).ConfigureAwait(false);
 
         EvictLocally<T>();
 
-        // One notification for the whole write, not one per row: the N properties of a single
-        // save are one edit, and the shared correlation id is what says so.
-        await NotifyWrittenAsync(
-            map, SettingWriteKind.Updated, BuildChanges(map, rows, prevMap), ct).ConfigureAwait(false);
+        await NotifyWrittenAsync(listeners, write, map, ct).ConfigureAwait(false);
 
         await FireChangedHandlersAsync(previous, model, map.GroupName, ct).ConfigureAwait(false);
 
@@ -331,12 +334,15 @@ public sealed partial class SettingManager : ISettingManager
             return;
         }
 
-        await _store.UpsertManyAsync([row], ct).ConfigureAwait(false);
+        var listeners = ResolveListeners();
+        var write     = listeners.Any ? NewWrite(map, SettingWriteKind.Updated, BuildChanges(map, [row], prevMap)) : null;
+
+        await RunParticipantsAsync(listeners, write, ct).ConfigureAwait(false);
+        await CommitAsync(() => _store.UpsertManyAsync([row], ct)).ConfigureAwait(false);
 
         EvictLocally<T>();
 
-        await NotifyWrittenAsync(
-            map, SettingWriteKind.Updated, BuildChanges(map, [row], prevMap), ct).ConfigureAwait(false);
+        await NotifyWrittenAsync(listeners, write, map, ct).ConfigureAwait(false);
 
         await FireChangedHandlersAsync(previous, candidate, map.GroupName, ct).ConfigureAwait(false);
 
@@ -401,13 +407,25 @@ public sealed partial class SettingManager : ISettingManager
     internal async Task ClearAsync<T>(CancellationToken ct) where T : new()
     {
         var map = GetTypeMap(typeof(T));
-        await _store.DeleteGroupAsync(map.GroupName, ct).ConfigureAwait(false);
+
+        // The most destructive operation in the library, and the one most worth reporting —
+        // including what it destroyed, or an audit of a clear could record only that it
+        // happened. The rows are read only when someone is listening, so a clear with no
+        // participant or observer costs what it always did.
+        var listeners = ResolveListeners();
+        SettingWrite? write = null;
+        if (listeners.Any)
+        {
+            var deleted = await _store.GetGroupAsync(map.GroupName, ct).ConfigureAwait(false);
+            write = NewWrite(map, SettingWriteKind.Cleared, BuildClearedChanges(map, deleted));
+        }
+
+        await RunParticipantsAsync(listeners, write, ct).ConfigureAwait(false);
+        await CommitAsync(() => _store.DeleteGroupAsync(map.GroupName, ct)).ConfigureAwait(false);
+
         EvictLocally<T>();
 
-        // The most destructive operation in the library, and the one most worth reporting.
-        // Changes is empty: the deletion is group-wide, and nothing is read back to enumerate
-        // what was there — SettingWriteKind.Cleared is what carries the meaning.
-        await NotifyWrittenAsync(map, SettingWriteKind.Cleared, [], ct).ConfigureAwait(false);
+        await NotifyWrittenAsync(listeners, write, map, ct).ConfigureAwait(false);
 
         LogGroupCleared(_logger, map.GroupName);
     }
@@ -444,23 +462,42 @@ public sealed partial class SettingManager : ISettingManager
     }
 
     /// <summary>
-    /// Reports a completed write to every registered <see cref="ISettingWriteObserver"/>.
+    /// The diff for a clear: one entry per row about to be deleted, with the stored value as
+    /// <see cref="SettingChange.OldValue"/> and no new one.
     /// <para>
-    /// Each observer is wrapped on its own: the write has already committed and the cache
-    /// entry is already gone, so an observer's exception must neither fail the caller nor
-    /// skip the observers after it. Same policy as
-    /// <see cref="FireChangedHandlersAsync{T}"/>, and the two are documented as a pair.
+    /// A row for a property the class no longer declares is listed too, since it is deleted
+    /// too, and is redacted if it was stored encrypted: with no property there is no
+    /// <c>[Sensitive]</c> to consult, and ciphertext is not a value worth reporting.
     /// </para>
     /// </summary>
-    private async Task NotifyWrittenAsync(
-        TypeMap map, SettingWriteKind kind, IReadOnlyList<SettingChange> changes, CancellationToken ct)
+    private static List<SettingChange> BuildClearedChanges(TypeMap map, IReadOnlyList<Setting> deleted)
     {
-        var observers = _sp.GetServices<ISettingWriteObserver>() as IList<ISettingWriteObserver>
-                        ?? [.. _sp.GetServices<ISettingWriteObserver>()];
+        var sensitive = map.Properties
+            .Where(p => p.IsSensitive)
+            .Select(p => p.Name)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-        if (observers.Count == 0) return;
+        return deleted
+            .OrderBy(r => r.Key, StringComparer.Ordinal)
+            .Select(r => sensitive.Contains(r.Key) || r.IsEncrypted
+                ? new SettingChange(r.Key, null, null, IsRedacted: true)
+                : new SettingChange(r.Key, r.Value, null, IsRedacted: false))
+            .ToList();
+    }
 
-        var write = new SettingWrite(
+    /// <summary>
+    /// The participants and observers for one write, resolved once so a transient
+    /// registration is not constructed twice and both phases see the same instances.
+    /// </summary>
+    private WriteListeners ResolveListeners()
+        => new([.. _sp.GetServices<ISettingWriteParticipant>()], [.. _sp.GetServices<ISettingWriteObserver>()]);
+
+    /// <summary>
+    /// The one <see cref="SettingWrite"/> for a write, built before the store is called so the
+    /// participants and the observers are handed the same instance.
+    /// </summary>
+    private SettingWrite NewWrite(TypeMap map, SettingWriteKind kind, IReadOnlyList<SettingChange> changes)
+        => new(
             GroupName:     map.GroupName,
             Route:         map.Route,
             Kind:          kind,
@@ -475,7 +512,79 @@ public sealed partial class SettingManager : ISettingManager
             GroupType = map.Type
         };
 
-        foreach (var observer in observers)
+    /// <summary>
+    /// Runs every <see cref="ISettingWriteParticipant"/> before the store is called.
+    /// <para>
+    /// Not wrapped, unlike observers: a participant's exception is the write's exception, so
+    /// the store is never called and the cache keeps its entry. What earlier participants
+    /// enlisted is discarded first, or it would stay in the store's unit of work and be saved by
+    /// whatever saves it next.
+    /// </para>
+    /// </summary>
+    /// <exception cref="InvalidOperationException">
+    /// A participant is registered and the store cannot commit what it enlists. Checked here as
+    /// well as in <c>Build()</c>, which does not see registrations made outside the builder.
+    /// </exception>
+    private async Task RunParticipantsAsync(WriteListeners listeners, SettingWrite? write, CancellationToken ct)
+    {
+        if (write is null || listeners.Participants.Count == 0) return;
+
+        if (_store is not IEnlistingSettingStore)
+        {
+            throw new InvalidOperationException(
+                $"A write participant ({listeners.Participants[0].GetType().Name}) is registered, but the " +
+                $"settings store ({_store.GetType().Name}) cannot commit what it enlists together with the " +
+                "write. Nothing was written.");
+        }
+
+        try
+        {
+            foreach (var participant in listeners.Participants)
+                await participant.OnWritingAsync(write, ct).ConfigureAwait(false);
+        }
+        catch
+        {
+            DiscardEnlisted();
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Calls the store, discarding what participants enlisted if it fails — on a concurrency
+    /// conflict, for one. The store undoes its own rows; the enlisted work is the manager's to
+    /// drop, because the manager is what ran the participants.
+    /// </summary>
+    private async Task CommitAsync(Func<Task> storeWrite)
+    {
+        try
+        {
+            // Invoked inside the try, so a store that throws before returning its task is
+            // handled the same as one whose task faults.
+            await storeWrite().ConfigureAwait(false);
+        }
+        catch
+        {
+            DiscardEnlisted();
+            throw;
+        }
+    }
+
+    private void DiscardEnlisted() => (_store as IEnlistingSettingStore)?.DiscardEnlisted();
+
+    /// <summary>
+    /// Reports a committed write to every registered <see cref="ISettingWriteObserver"/>.
+    /// <para>
+    /// Each observer is wrapped on its own: the write has already committed and the cache
+    /// entry is already gone, so an observer's exception must neither fail the caller nor
+    /// skip the observers after it. Same policy as
+    /// <see cref="FireChangedHandlersAsync{T}"/>, and the two are documented as a pair.
+    /// </para>
+    /// </summary>
+    private async Task NotifyWrittenAsync(WriteListeners listeners, SettingWrite? write, TypeMap map, CancellationToken ct)
+    {
+        if (write is null) return;
+
+        foreach (var observer in listeners.Observers)
         {
             try
             {
@@ -724,6 +833,13 @@ public sealed partial class SettingManager : ISettingManager
     [LoggerMessage(EventId = 1009, Level = LogLevel.Error,
         Message = "Cannot map the stored state of settings group '{group}'; comparing against defaults instead.")]
     private static partial void LogPreviousModelFailed(ILogger logger, string group, Exception ex);
+
+    private sealed record WriteListeners(
+        IReadOnlyList<ISettingWriteParticipant> Participants,
+        IReadOnlyList<ISettingWriteObserver>    Observers)
+    {
+        public bool Any => Participants.Count > 0 || Observers.Count > 0;
+    }
 
     /// <summary>What this instance's cached copy of a group was loaded under, and when it was last re-checked.</summary>
     private sealed record CacheProbe(string? Version, DateTimeOffset CheckedAt);

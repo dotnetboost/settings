@@ -130,6 +130,25 @@ namespace Microsoft.Extensions.DependencyInjection
         }
 
         /// <summary>
+        /// Registers a participant called once inside every write to any settings group,
+        /// before the store saves it, to enlist work that must commit with the write.
+        /// <para>
+        /// Several may be registered; all run, in registration order. An exception aborts the
+        /// write — see <see cref="ISettingWriteParticipant"/>. Only a provider whose store can
+        /// commit what participants enlist accepts them; <c>Build()</c> refuses one otherwise.
+        /// </para>
+        /// </summary>
+        public static SettingBuilder UseWriteParticipant<TParticipant>(this SettingBuilder builder)
+            where TParticipant : class, ISettingWriteParticipant
+        {
+            ArgumentNullException.ThrowIfNull(builder);
+
+            // Add, not TryAdd, for the same reason as observers: participants compose.
+            builder.Services.AddScoped<ISettingWriteParticipant, TParticipant>();
+            return builder;
+        }
+
+        /// <summary>
         /// Registers <see cref="LoggingSettingWriteObserver"/>, which logs one line per write
         /// naming the changed properties — never their values. Off unless you ask for it.
         /// </summary>
