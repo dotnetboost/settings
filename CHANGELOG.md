@@ -5,7 +5,9 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-_Nothing yet._
+### Changed
+- Aspire moved from 13.5.2 to 13.6.4, and Microsoft.Extensions.* and EF Core packages from 10.0.11 to 10.0.12 — the floor Aspire 13.6 requires.
+- Microsoft.Data.SqlClient (integration tests and sample only) moved from 6.1.6 to 6.1.8, which takes System.Security.Cryptography.Pkcs 9.0.21 and clears CVE-2026-70162 and CVE-2026-84008.
 
 ## [1.0.0-preview.2] — 2026-10-10
 
