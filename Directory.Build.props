@@ -39,6 +39,10 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.SourceLink.GitHub"/>
+    <!-- Build-time only: it embeds source-control metadata into the PDBs. PrivateAssets="All"
+         keeps it out of the packages' dependencies, so users never download it. Without it,
+         preview.1 to preview.3 listed Microsoft.SourceLink.GitHub as a dependency of every
+         package, and applications got "Source control information is not available" warnings. -->
+    <PackageReference Include="Microsoft.SourceLink.GitHub" PrivateAssets="All" />
   </ItemGroup>
 </Project>
