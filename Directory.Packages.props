@@ -4,13 +4,31 @@
     <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
   </PropertyGroup>
 
-  <ItemGroup Label="Microsoft">
+  <!--
+    Microsoft.Extensions.* are MINIMUM versions for the shipped packages (IsShippedLibrary, set in
+    src/Directory.Build.props), so they stay where the libraries need them. Everything else — the
+    tests, the sample and the Aspire host — takes what Aspire.Hosting 13.6.5 asks for, 10.0.14, or
+    transitive pinning turns the AppHost's restore into a downgrade (NU1109).
+  -->
+  <ItemGroup Label="Microsoft.Extensions — shipped libraries" Condition="'$(IsShippedLibrary)' == 'true'">
     <PackageVersion Include="Microsoft.Extensions.Caching.Memory" Version="10.0.12" />
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.12" />
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.12" />
     <PackageVersion Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.12" />
     <PackageVersion Include="Microsoft.Extensions.Logging" Version="10.0.12" />
     <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.12" />
+  </ItemGroup>
+
+  <ItemGroup Label="Microsoft.Extensions — tests, the sample and the AppHost" Condition="'$(IsShippedLibrary)' != 'true'">
+    <PackageVersion Include="Microsoft.Extensions.Caching.Memory" Version="10.0.14" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.14" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.14" />
+    <PackageVersion Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.14" />
+    <PackageVersion Include="Microsoft.Extensions.Logging" Version="10.0.14" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.14" />
+  </ItemGroup>
+
+  <ItemGroup Label="Microsoft">
     <PackageVersion Include="Microsoft.AspNetCore.Http.Abstractions" Version="2.3.12" />
     <!-- 10.0.12 across the board: the floor that Aspire 13.6 asks for. Never below 10.0.11,
          the first Microsoft.AspNetCore.OpenApi release that requires the patched
@@ -20,22 +38,22 @@
   </ItemGroup>
 
   <ItemGroup Label="Aspire — AppHost (orchestration)">
-    <PackageVersion Include="Aspire.Hosting.AppHost" Version="13.6.4" />
-    <PackageVersion Include="Aspire.Hosting.PostgreSQL" Version="13.6.4" />
-    <PackageVersion Include="Aspire.Hosting.Redis" Version="13.6.4" />
-    <PackageVersion Include="Aspire.Hosting.JavaScript" Version="13.6.4" />
+    <PackageVersion Include="Aspire.Hosting.AppHost" Version="13.6.5" />
+    <PackageVersion Include="Aspire.Hosting.PostgreSQL" Version="13.6.5" />
+    <PackageVersion Include="Aspire.Hosting.Redis" Version="13.6.5" />
+    <PackageVersion Include="Aspire.Hosting.JavaScript" Version="13.6.5" />
     <!-- Referenced only when the matching provider block in AppHost.cs is uncommented. -->
-    <PackageVersion Include="Aspire.Hosting.MongoDB" Version="13.6.4" />
-    <PackageVersion Include="Aspire.Hosting.SqlServer" Version="13.6.4" />
+    <PackageVersion Include="Aspire.Hosting.MongoDB" Version="13.6.5" />
+    <PackageVersion Include="Aspire.Hosting.SqlServer" Version="13.6.5" />
   </ItemGroup>
 
   <ItemGroup Label="Aspire — client integrations (consumed by the API)">
     <PackageVersion Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
     <!-- Backs the AddDbContextCheck<AppDbContext>() readiness probe in samples/SampleApp. -->
     <PackageVersion Include="Microsoft.Extensions.Diagnostics.HealthChecks.EntityFrameworkCore" Version="10.0.12" />
-    <PackageVersion Include="Aspire.StackExchange.Redis" Version="13.6.4" />
+    <PackageVersion Include="Aspire.StackExchange.Redis" Version="13.6.5" />
     <!-- Referenced only when the matching provider block in Program.cs is uncommented. -->
-    <PackageVersion Include="Aspire.Npgsql" Version="13.6.4" />
+    <PackageVersion Include="Aspire.Npgsql" Version="13.6.5" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.SqlServer" Version="10.0.12" />
   </ItemGroup>
 

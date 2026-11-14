@@ -5,6 +5,16 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Security
+- **Aspire moved from 13.6.4 to 13.6.5**, for
+  [GHSA-f7vh-h5g3-7jrh](https://github.com/advisories/GHSA-f7vh-h5g3-7jrh) (CVE-2026-120006), an
+  elevation-of-privilege vulnerability in `Aspire.Hosting` and `Aspire.Hosting.AppHost` below
+  13.6.5. Only the local AppHost and the sample app uses Aspire; no shipped package depends on it, so nothing
+  that consumes the library is affected. NuGet's audit fails the restore on 13.6.4, which is what
+  this unblocks.
+- Aspire 13.6.5 needs `Microsoft.Extensions.*` 10.0.14, so the tests, the sample and the AppHost now take it. The shipped
+  packages keep their 10.0.12 floor: nothing that consumes them has to move.
+
 ## [1.0.0-preview.3] — 2026-11-02
 
 The third prerelease. It adds what auditing needs from the library: `ISettingWriteParticipant`,
