@@ -23,4 +23,9 @@
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
   </PropertyGroup>
 
+  <!-- Selects the shipped packages' minimum versions in Directory.Packages.props. -->
+  <PropertyGroup>
+    <IsShippedLibrary>true</IsShippedLibrary>
+  </PropertyGroup>
+
 </Project>
